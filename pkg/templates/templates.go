@@ -233,7 +233,7 @@ func getGoServiceTemplate() *Template {
 				Description: "Go version to use",
 				Default:     "1.21",
 				Required:    true,
-				Options:     []string{"1.20", "1.21", "1.22"},
+				Options:     []string{"1.21", "1.22", "1.23", "1.24"},
 			},
 			"testCommand": {
 				Type:        "string",
