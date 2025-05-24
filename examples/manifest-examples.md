@@ -47,7 +47,7 @@ spec:
         format: "sarif"
         output: "trivy-results.sarif"
         severity: "CRITICAL,HIGH"
-        
+
     - name: "upload-trivy-results"
       position: "after:trivy-security-scan"
       uses: "github/codeql-action/upload-sarif@v3"
@@ -62,7 +62,7 @@ spec:
       continue-on-error: false
       timeout-minutes: 10
 
-# Note: For Node.js templates with custom Trivy scanning, you'll need to manually 
+# Note: For Node.js templates with custom Trivy scanning, you'll need to manually
 # add permissions to your workflow job:
 #
 # jobs:
@@ -155,7 +155,66 @@ spec:
           if: "success()"
 ```
 
-## 4. Security-First Go Service
+## 4. Go Service with Container Building and Security
+
+```yaml
+# gpgen.yaml - Complete Go service with security scanning and container building
+apiVersion: gpgen.dev/v1
+kind: Pipeline
+metadata:
+  name: containerized-go-service
+  annotations:
+    gpgen.dev/validation-mode: strict
+    gpgen.dev/description: "Go microservice with security scanning and container building"
+
+spec:
+  template: "go-service"
+
+  inputs:
+    goVersion: "1.23"
+    testCommand: "go test -race ./..."
+    buildCommand: "go build -o bin/service ./cmd/service"
+
+    # Security scanning with Trivy (automatically adds GitHub Security tab permissions)
+    trivyScanEnabled: true
+    trivySeverity: "CRITICAL,HIGH"
+
+    # Container building (automatically adds container registry permissions)
+    containerEnabled: true
+    containerRegistry: "ghcr.io"
+    containerImageName: "${{ github.repository }}"
+    containerImageTag: "${{ github.sha }}"
+    containerDockerfile: "Dockerfile"
+    containerBuildContext: "."
+    containerBuildArgs: "{\"GO_VERSION\":\"1.23\"}"
+    containerPushEnabled: true
+
+  environments:
+    development:
+      inputs:
+        trivySeverity: "CRITICAL,HIGH,MEDIUM,LOW"  # Scan all severities in dev
+        containerPushEnabled: false  # Don't push containers in dev
+
+    staging:
+      inputs:
+        trivySeverity: "CRITICAL,HIGH,MEDIUM"
+        containerImageTag: "staging-${{ github.sha }}"
+
+    production:
+      inputs:
+        trivySeverity: "CRITICAL"  # Only critical issues block production
+        containerImageTag: "v${{ github.ref_name }}"  # Use tag for production
+        containerBuildArgs: "{\"GO_VERSION\":\"1.23\",\"BUILD_ENV\":\"production\"}"
+```
+
+**Generated Features (Automatic)**:
+- **Security Permissions**: `contents: read`, `security-events: write` for Trivy scanning
+- **Container Permissions**: `packages: write` for GitHub Container Registry
+- **Docker Buildx**: Automatic setup for advanced building features
+- **Registry Login**: Automatic authentication using GitHub token
+- **Build Caching**: GitHub Actions cache optimization for faster builds
+
+## 5. Security-First Go Service
 
 ```yaml
 # gpgen.yaml - Enterprise security scanning configuration
@@ -182,7 +241,7 @@ spec:
       run: |
         go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
         gosec -fmt sarif -out gosec-results.sarif ./...
-      
+
     - name: "upload-gosec-results"
       position: "after:gosec-security-scan"
       uses: "github/codeql-action/upload-sarif@v3"

@@ -308,7 +308,7 @@ spec:
   inputs:
     trivyScanEnabled: true
     trivySeverity: "CRITICAL,HIGH"  # Block on serious vulnerabilities
-    
+
   environments:
     staging:
       inputs:
@@ -320,6 +320,6 @@ spec:
 
 This ensures that:
 - Development gets feedback on all security issues
-- Staging catches medium-severity vulnerabilities  
+- Staging catches medium-severity vulnerabilities
 - Production deployments are only blocked by critical security issues
 - All security findings are tracked in GitHub's Security tab for compliance and auditing

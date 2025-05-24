@@ -95,11 +95,25 @@ func (g *WorkflowGenerator) GenerateWorkflow(m *manifest.Manifest, environment s
 	return buf.String(), nil
 }
 
-// getEffectiveInputs merges base inputs with environment-specific overrides
+// getEffectiveInputs merges template defaults, base inputs, environment-specific overrides and event context
 func (g *WorkflowGenerator) getEffectiveInputs(m *manifest.Manifest, environment string) map[string]interface{} {
 	inputs := make(map[string]interface{})
 
-	// Start with base inputs
+	// Load template to get defaults
+	tmpl, err := g.templateManager.LoadTemplate(m.Spec.Template)
+	if err != nil {
+		// If we can't load the template, proceed without defaults
+		// This shouldn't happen as template loading is validated earlier
+	} else {
+		// Start with template defaults
+		for k, inputDef := range tmpl.Inputs {
+			if inputDef.Default != nil {
+				inputs[k] = inputDef.Default
+			}
+		}
+	}
+
+	// Apply base inputs (overrides template defaults)
 	for k, v := range m.Spec.Inputs {
 		inputs[k] = v
 	}
@@ -113,7 +127,36 @@ func (g *WorkflowGenerator) getEffectiveInputs(m *manifest.Manifest, environment
 		}
 	}
 
+	// Add event-driven context based on environment triggers
+	g.addEventDrivenContext(inputs, environment)
+
 	return inputs
+}
+
+// addEventDrivenContext adds context-aware settings based on environment and triggers
+func (g *WorkflowGenerator) addEventDrivenContext(inputs map[string]interface{}, environment string) {
+	// Set default event-driven behavior based on environment
+	switch environment {
+	case "default", "staging":
+		// Default/staging: Build on PRs for validation, but strategic pushing
+		if _, exists := inputs["containerBuildOnPR"]; !exists {
+			inputs["containerBuildOnPR"] = true
+		}
+		if _, exists := inputs["containerPushOnProduction"]; !exists {
+			inputs["containerPushOnProduction"] = false // Don't push on production events in staging
+		}
+	case "production":
+		// Production: Build and push on production events
+		if _, exists := inputs["containerBuildOnPR"]; !exists {
+			inputs["containerBuildOnPR"] = false // Don't build on PRs in production env
+		}
+		if _, exists := inputs["containerBuildOnProduction"]; !exists {
+			inputs["containerBuildOnProduction"] = true
+		}
+		if _, exists := inputs["containerPushOnProduction"]; !exists {
+			inputs["containerPushOnProduction"] = true
+		}
+	}
 }
 
 // generateSteps generates workflow steps by merging template steps with custom steps
@@ -152,6 +195,8 @@ func (g *WorkflowGenerator) processTemplateStep(templateStep templates.Step, inp
 		if err != nil {
 			return step, fmt.Errorf("failed to substitute run command: %w", err)
 		}
+		// Replace GitHub Actions placeholders
+		run = g.replaceGitHubActionsPlaceholders(run)
 		step.Run = run
 	}
 
@@ -163,6 +208,8 @@ func (g *WorkflowGenerator) processTemplateStep(templateStep templates.Step, inp
 			if err != nil {
 				return step, fmt.Errorf("failed to substitute with parameter %s: %w", k, err)
 			}
+			// Replace GitHub Actions placeholders
+			value = g.replaceGitHubActionsPlaceholders(value)
 			step.With[k] = value
 		}
 	}
@@ -175,6 +222,8 @@ func (g *WorkflowGenerator) processTemplateStep(templateStep templates.Step, inp
 			if err != nil {
 				return step, fmt.Errorf("failed to substitute env variable %s: %w", k, err)
 			}
+			// Replace GitHub Actions placeholders
+			value = g.replaceGitHubActionsPlaceholders(value)
 			step.Env[k] = value
 		}
 	}
@@ -185,6 +234,8 @@ func (g *WorkflowGenerator) processTemplateStep(templateStep templates.Step, inp
 		if err != nil {
 			return step, fmt.Errorf("failed to substitute if condition: %w", err)
 		}
+		// Replace GitHub Actions placeholders
+		ifCondition = g.replaceGitHubActionsPlaceholders(ifCondition)
 		step.If = ifCondition
 	}
 
@@ -412,7 +463,24 @@ func (g *WorkflowGenerator) getRequiredPermissions(tmpl *templates.Template, inp
 		}
 	}
 
-	// Add other permission checks here as needed for different templates/features
+	// Check if container building/pushing is enabled
+	if containerEnabled, exists := inputs["containerEnabled"]; exists {
+		if enabled, ok := containerEnabled.(bool); ok && enabled {
+			// Add permissions required for container registry operations
+			permissions["packages"] = "write"
+			if permissions["contents"] == "" {
+				permissions["contents"] = "read"
+			}
+		}
+	}
 
 	return permissions
+}
+
+// replaceGitHubActionsPlaceholders replaces template placeholders with GitHub Actions syntax
+func (g *WorkflowGenerator) replaceGitHubActionsPlaceholders(value string) string {
+	// Replace placeholders with GitHub Actions syntax
+	value = strings.ReplaceAll(value, "GITHUB_ACTOR_PLACEHOLDER", "${{ github.actor }}")
+	value = strings.ReplaceAll(value, "GITHUB_TOKEN_PLACEHOLDER", "${{ secrets.GITHUB_TOKEN }}")
+	return value
 }

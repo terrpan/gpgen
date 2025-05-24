@@ -7,6 +7,97 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test helper functions for modular testing
+
+// templateTestCase defines a test case for template validation
+type templateTestCase struct {
+	name                string
+	template            *Template
+	expectedName        string
+	expectedSetupStep   string
+	expectedSetupAction string
+	versionInputKey     string
+	expectedVersions    []string
+}
+
+// testTemplateStructure validates common template structure requirements
+func testTemplateStructure(t *testing.T, tc templateTestCase) {
+	t.Helper()
+
+	assert.Equal(t, tc.expectedName, tc.template.Name)
+	assert.NotEmpty(t, tc.template.Description)
+	assert.NotEmpty(t, tc.template.Steps)
+	assert.True(t, len(tc.template.Steps) >= 3, "Template should have at least 3 steps")
+
+	// Verify checkout step (should be first)
+	checkoutStep := tc.template.Steps[0]
+	assert.Equal(t, "checkout", checkoutStep.ID)
+	assert.Equal(t, "actions/checkout@v4", checkoutStep.Uses)
+}
+
+// testLanguageVersionInput validates language version input configuration
+func testLanguageVersionInput(t *testing.T, template *Template, versionKey string, expectedVersions []string) {
+	t.Helper()
+
+	versionInput, exists := template.Inputs[versionKey]
+	require.True(t, exists, "Template should have %s input", versionKey)
+	assert.True(t, versionInput.Required, "%s should be required", versionKey)
+	assert.Equal(t, "string", versionInput.Type, "%s should be string type", versionKey)
+
+	for _, version := range expectedVersions {
+		assert.Contains(t, versionInput.Options, version, "Should support %s version %s", versionKey, version)
+	}
+}
+
+// testLanguageSetupStep validates language-specific setup step
+func testLanguageSetupStep(t *testing.T, template *Template, setupStepID, expectedAction string) {
+	t.Helper()
+
+	hasSetupStep := false
+	for _, step := range template.Steps {
+		if step.ID == setupStepID {
+			hasSetupStep = true
+			assert.Equal(t, expectedAction, step.Uses, "Setup step should use correct action")
+			break
+		}
+	}
+	assert.True(t, hasSetupStep, "Template should have %s step", setupStepID)
+}
+
+// testCommonInputs validates that all templates have security and container inputs
+func testCommonInputs(t *testing.T, template *Template) {
+	t.Helper()
+
+	// Check security inputs
+	securityInput, exists := template.Inputs["security"]
+	assert.True(t, exists, "Template should have security input")
+	assert.Equal(t, "object", securityInput.Type)
+
+	// Check container inputs
+	containerInput, exists := template.Inputs["container"]
+	assert.True(t, exists, "Template should have container input")
+	assert.Equal(t, "object", containerInput.Type)
+}
+
+// testCommonSteps validates that all templates have security and container steps
+func testCommonSteps(t *testing.T, template *Template) {
+	t.Helper()
+
+	stepIDs := make(map[string]bool)
+	for _, step := range template.Steps {
+		stepIDs[step.ID] = true
+	}
+
+	// Check for security steps
+	assert.True(t, stepIDs["security-scan"], "Template should have security-scan step")
+	assert.True(t, stepIDs["upload-sarif"], "Template should have upload-sarif step")
+
+	// Check for container steps
+	assert.True(t, stepIDs["setup-docker-buildx"], "Template should have setup-docker-buildx step")
+	assert.True(t, stepIDs["login-registry"], "Template should have login-registry step")
+	assert.True(t, stepIDs["build-and-push"], "Template should have build-and-push step")
+}
+
 func TestTemplateManager_LoadTemplate(t *testing.T) {
 	tm := NewTemplateManager("")
 
@@ -108,76 +199,79 @@ func TestTemplateManager_ValidateInputs(t *testing.T) {
 func TestNodeAppTemplate(t *testing.T) {
 	template := getNodeAppTemplate()
 
-	assert.Equal(t, "node-app", template.Name)
-	assert.NotEmpty(t, template.Description)
-	assert.NotEmpty(t, template.Steps)
+	// Test basic template structure
+	testTemplateStructure(t, templateTestCase{
+		template:     template,
+		expectedName: "node-app",
+	})
 
-	// Check required inputs
-	nodeVersionInput, exists := template.Inputs["nodeVersion"]
+	// Test Node.js-specific configuration
+	testLanguageVersionInput(t, template, "nodeVersion", []string{"16", "18", "20", "22"})
+	testLanguageSetupStep(t, template, "setup-node", "actions/setup-node@v4")
+
+	// Test package manager input
+	packageManagerInput, exists := template.Inputs["packageManager"]
 	require.True(t, exists)
-	assert.True(t, nodeVersionInput.Required)
-	assert.Equal(t, "string", nodeVersionInput.Type)
-	assert.Contains(t, nodeVersionInput.Options, "18")
+	assert.Equal(t, "string", packageManagerInput.Type)
+	assert.Contains(t, packageManagerInput.Options, "npm")
+	assert.Contains(t, packageManagerInput.Options, "yarn")
+	assert.Contains(t, packageManagerInput.Options, "pnpm")
 
-	// Check steps structure
-	assert.True(t, len(template.Steps) >= 4) // At least checkout, setup, install, test
-
-	// Verify checkout step
-	checkoutStep := template.Steps[0]
-	assert.Equal(t, "checkout", checkoutStep.ID)
-	assert.Equal(t, "actions/checkout@v4", checkoutStep.Uses)
+	// Test common inputs and steps
+	testCommonInputs(t, template)
+	testCommonSteps(t, template)
 }
 
 func TestGoServiceTemplate(t *testing.T) {
 	template := getGoServiceTemplate()
 
-	assert.Equal(t, "go-service", template.Name)
-	assert.NotEmpty(t, template.Description)
-	assert.NotEmpty(t, template.Steps)
+	// Test basic template structure
+	testTemplateStructure(t, templateTestCase{
+		template:     template,
+		expectedName: "go-service",
+	})
 
-	// Check Go version input
-	goVersionInput, exists := template.Inputs["goVersion"]
+	// Test Go-specific configuration
+	testLanguageVersionInput(t, template, "goVersion", []string{"1.21", "1.22", "1.23", "1.24"})
+	testLanguageSetupStep(t, template, "setup-go", "actions/setup-go@v4")
+
+	// Test Go-specific inputs
+	testCommandInput, exists := template.Inputs["testCommand"]
 	require.True(t, exists)
-	assert.True(t, goVersionInput.Required)
-	assert.Equal(t, "string", goVersionInput.Type)
-	assert.Contains(t, goVersionInput.Options, "1.21")
+	assert.Equal(t, "string", testCommandInput.Type)
+	assert.True(t, testCommandInput.Required)
 
-	// Check that it has Go-specific steps
-	hasSetupGo := false
-	for _, step := range template.Steps {
-		if step.ID == "setup-go" {
-			hasSetupGo = true
-			assert.Equal(t, "actions/setup-go@v4", step.Uses)
-			break
-		}
-	}
-	assert.True(t, hasSetupGo, "Go template should have setup-go step")
+	buildCommandInput, exists := template.Inputs["buildCommand"]
+	require.True(t, exists)
+	assert.Equal(t, "string", buildCommandInput.Type)
+	assert.True(t, buildCommandInput.Required)
+
+	// Test common inputs and steps
+	testCommonInputs(t, template)
+	testCommonSteps(t, template)
 }
 
 func TestPythonAppTemplate(t *testing.T) {
 	template := getPythonAppTemplate()
 
-	assert.Equal(t, "python-app", template.Name)
-	assert.NotEmpty(t, template.Description)
-	assert.NotEmpty(t, template.Steps)
+	// Test basic template structure
+	testTemplateStructure(t, templateTestCase{
+		template:     template,
+		expectedName: "python-app",
+	})
 
-	// Check Python version input
-	pythonVersionInput, exists := template.Inputs["pythonVersion"]
+	// Test Python-specific configuration
+	testLanguageVersionInput(t, template, "pythonVersion", []string{"3.9", "3.10", "3.11", "3.12"})
+	testLanguageSetupStep(t, template, "setup-python", "actions/setup-python@v4")
+
+	// Test Python-specific inputs
+	requirementsInput, exists := template.Inputs["requirements"]
 	require.True(t, exists)
-	assert.True(t, pythonVersionInput.Required)
-	assert.Equal(t, "string", pythonVersionInput.Type)
-	assert.Contains(t, pythonVersionInput.Options, "3.11")
+	assert.Equal(t, "string", requirementsInput.Type)
 
-	// Check that it has Python-specific steps
-	hasSetupPython := false
-	for _, step := range template.Steps {
-		if step.ID == "setup-python" {
-			hasSetupPython = true
-			assert.Equal(t, "actions/setup-python@v4", step.Uses)
-			break
-		}
-	}
-	assert.True(t, hasSetupPython, "Python template should have setup-python step")
+	// Test common inputs and steps
+	testCommonInputs(t, template)
+	testCommonSteps(t, template)
 }
 
 func TestTemplateManager_ListTemplates(t *testing.T) {

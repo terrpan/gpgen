@@ -115,6 +115,46 @@
                                 "CRITICAL,HIGH",
                                 "CRITICAL,HIGH,MEDIUM"
                             ]
+                        },
+                        "containerEnabled": {
+                            "type": "boolean",
+                            "description": "Enable container image building and pushing (for go-service template)",
+                            "default": false
+                        },
+                        "containerRegistry": {
+                            "type": "string",
+                            "description": "Container registry to push images to (for go-service template)",
+                            "default": "ghcr.io"
+                        },
+                        "containerImageName": {
+                            "type": "string",
+                            "description": "Base name for container images (for go-service template)",
+                            "default": "${{ github.repository }}"
+                        },
+                        "containerImageTag": {
+                            "type": "string",
+                            "description": "Tag for container images (for go-service template)",
+                            "default": "${{ github.sha }}"
+                        },
+                        "containerDockerfile": {
+                            "type": "string",
+                            "description": "Path to the Dockerfile (for go-service template)",
+                            "default": "Dockerfile"
+                        },
+                        "containerBuildContext": {
+                            "type": "string",
+                            "description": "Context for container build (for go-service template)",
+                            "default": "."
+                        },
+                        "containerBuildArgs": {
+                            "type": "string",
+                            "description": "Additional container build arguments as JSON string (for go-service template)",
+                            "default": "{}"
+                        },
+                        "containerPushEnabled": {
+                            "type": "boolean",
+                            "description": "Enable container image push to registry (for go-service template)",
+                            "default": true
                         }
                     }
                 },

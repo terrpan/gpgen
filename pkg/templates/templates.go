@@ -2,6 +2,8 @@ package templates
 
 import (
 	"fmt"
+
+	"github.com/terrpan/gpgen/pkg/config"
 )
 
 // Template represents a golden path template
@@ -151,246 +153,348 @@ func getBuiltinTemplate(name string) (*Template, error) {
 }
 
 func getNodeAppTemplate() *Template {
+	// Create base inputs for Node.js language
+	baseInputs := map[string]Input{
+		"nodeVersion":    createLanguageVersionInput("Node.js", config.DefaultValues["nodeVersion"].(string), config.LanguageVersions["node"]),
+		"packageManager": createPackageManagerInput(config.DefaultValues["packageManager"].(map[string]string)["node"], config.PackageManagers["node"]),
+		"testCommand":    createCommandInput("Command to run tests", config.DefaultValues["testCommand"].(map[string]string)["node"], true),
+		"buildCommand":   createCommandInput("Command to build the application", config.DefaultValues["buildCommand"].(map[string]string)["node"], false),
+	}
+
+	// Merge with security and container inputs
+	allInputs := mergeInputs(baseInputs, createSecurityInputs(), createContainerInputs())
+
+	// Create base steps
+	steps := []Step{
+		createCheckoutStep(),
+		{
+			ID:   "setup-node",
+			Name: "Setup Node.js",
+			Uses: "actions/setup-node@v4",
+			With: map[string]string{
+				"node-version": "{{ .Inputs.nodeVersion }}",
+				"cache":        "{{ .Inputs.packageManager }}",
+			},
+		},
+		{
+			ID:   "install",
+			Name: "Install dependencies",
+			Run:  "{{ .Inputs.packageManager }} {{ if eq .Inputs.packageManager \"npm\" }}ci{{ else }}install --frozen-lockfile{{ end }}",
+		},
+		{
+			ID:   "test",
+			Name: "Run tests",
+			Run:  "{{ .Inputs.testCommand }}",
+		},
+		{
+			ID:   "build",
+			Name: "Build application",
+			Run:  "{{ .Inputs.buildCommand }}",
+			If:   "{{ .Inputs.buildCommand }}",
+		},
+	}
+
+	// Add security and container steps
+	steps = append(steps, createSecuritySteps()...)
+	steps = append(steps, createContainerSteps()...)
+
 	return &Template{
 		Name:        "node-app",
 		Description: "Node.js application with testing, building, and deployment",
 		Version:     "1.0.0",
 		Author:      "GPGen Team",
 		Tags:        []string{"nodejs", "javascript", "web"},
-		Inputs: map[string]Input{
-			"nodeVersion": {
-				Type:        "string",
-				Description: "Node.js version to use",
-				Default:     "18",
-				Required:    true,
-				Options:     []string{"16", "18", "20", "22"},
-			},
-			"packageManager": {
-				Type:        "string",
-				Description: "Package manager to use",
-				Default:     "npm",
-				Required:    true,
-				Options:     []string{"npm", "yarn", "pnpm"},
-			},
-			"testCommand": {
-				Type:        "string",
-				Description: "Command to run tests",
-				Default:     "npm test",
-				Required:    true,
-			},
-			"buildCommand": {
-				Type:        "string",
-				Description: "Command to build the application",
-				Default:     "npm run build",
-				Required:    false,
-			},
-		},
-		Steps: []Step{
-			{
-				ID:   "checkout",
-				Name: "Checkout code",
-				Uses: "actions/checkout@v4",
-			},
-			{
-				ID:   "setup-node",
-				Name: "Setup Node.js",
-				Uses: "actions/setup-node@v4",
-				With: map[string]string{
-					"node-version": "{{ .Inputs.nodeVersion }}",
-					"cache":        "{{ .Inputs.packageManager }}",
-				},
-			},
-			{
-				ID:   "install",
-				Name: "Install dependencies",
-				Run:  "{{ .Inputs.packageManager }} {{ if eq .Inputs.packageManager \"npm\" }}ci{{ else }}install --frozen-lockfile{{ end }}",
-			},
-			{
-				ID:   "test",
-				Name: "Run tests",
-				Run:  "{{ .Inputs.testCommand }}",
-			},
-			{
-				ID:   "build",
-				Name: "Build application",
-				Run:  "{{ .Inputs.buildCommand }}",
-				If:   "{{ .Inputs.buildCommand }}",
-			},
-		},
+		Inputs:      allInputs,
+		Steps:       steps,
 	}
 }
 
 func getGoServiceTemplate() *Template {
+	// Create base inputs for Go language
+	baseInputs := map[string]Input{
+		"goVersion":    createLanguageVersionInput("Go", "1.21", []string{"1.21", "1.22", "1.23", "1.24"}),
+		"testCommand":  createCommandInput("Command to run tests", "go test ./...", true),
+		"buildCommand": createCommandInput("Command to build the service", "go build -o bin/service ./cmd/service", true),
+		"platforms": {
+			Type:        "string",
+			Description: "Target platforms for cross-compilation",
+			Default:     "linux/amd64,darwin/amd64",
+			Required:    false,
+		},
+	}
+
+	// Merge with security and container inputs
+	allInputs := mergeInputs(baseInputs, createSecurityInputs(), createContainerInputs())
+
+	// Create base steps
+	steps := []Step{
+		createCheckoutStep(),
+		{
+			ID:   "setup-go",
+			Name: "Setup Go",
+			Uses: "actions/setup-go@v4",
+			With: map[string]string{
+				"go-version": "{{ .Inputs.goVersion }}",
+				"cache":      "true",
+			},
+		},
+		{
+			ID:   "test",
+			Name: "Run tests",
+			Run:  "{{ .Inputs.testCommand }}",
+		},
+		{
+			ID:   "build",
+			Name: "Build service",
+			Run:  "{{ .Inputs.buildCommand }}",
+		},
+	}
+
+	// Add security and container steps
+	steps = append(steps, createSecuritySteps()...)
+	steps = append(steps, createContainerSteps()...)
+
 	return &Template{
 		Name:        "go-service",
 		Description: "Go service with testing, building, and cross-compilation",
 		Version:     "1.0.0",
 		Author:      "GPGen Team",
 		Tags:        []string{"go", "golang", "service", "api"},
-		Inputs: map[string]Input{
-			"goVersion": {
-				Type:        "string",
-				Description: "Go version to use",
-				Default:     "1.21",
-				Required:    true,
-				Options:     []string{"1.21", "1.22", "1.23", "1.24"},
-			},
-			"testCommand": {
-				Type:        "string",
-				Description: "Command to run tests",
-				Default:     "go test ./...",
-				Required:    true,
-			},
-			"buildCommand": {
-				Type:        "string",
-				Description: "Command to build the service",
-				Default:     "go build -o bin/service ./cmd/service",
-				Required:    true,
-			},
-			"platforms": {
-				Type:        "string",
-				Description: "Target platforms for cross-compilation",
-				Default:     "linux/amd64,darwin/amd64",
-				Required:    false,
-			},
-			"trivyScanEnabled": {
-				Type:        "boolean",
-				Description: "Enable Trivy vulnerability scanning",
-				Default:     true,
-				Required:    false,
-			},
-			"trivySeverity": {
-				Type:        "string",
-				Description: "Trivy scan severity levels",
-				Default:     "CRITICAL,HIGH",
-				Required:    false,
-				Options:     []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "CRITICAL,HIGH", "CRITICAL,HIGH,MEDIUM"},
-			},
-		},
-		Steps: []Step{
-			{
-				ID:   "checkout",
-				Name: "Checkout code",
-				Uses: "actions/checkout@v4",
-			},
-			{
-				ID:   "setup-go",
-				Name: "Setup Go",
-				Uses: "actions/setup-go@v4",
-				With: map[string]string{
-					"go-version": "{{ .Inputs.goVersion }}",
-					"cache":      "true",
-				},
-			},
-			{
-				ID:   "test",
-				Name: "Run tests",
-				Run:  "{{ .Inputs.testCommand }}",
-			},
-			{
-				ID:   "build",
-				Name: "Build service",
-				Run:  "{{ .Inputs.buildCommand }}",
-			},
-			{
-				ID:   "security-scan",
-				Name: "Run Trivy vulnerability scanner",
-				Uses: "aquasecurity/trivy-action@master",
-				With: map[string]string{
-					"scan-type": "fs",
-					"scan-ref":  ".",
-					"format":    "sarif",
-					"output":    "trivy-results.sarif",
-					"severity":  "{{ .Inputs.trivySeverity }}",
-					"exit-code": "1",
-				},
-				If: "{{ .Inputs.trivyScanEnabled }}",
-			},
-			{
-				ID:   "upload-sarif",
-				Name: "Upload Trivy scan results to GitHub Security tab",
-				Uses: "github/codeql-action/upload-sarif@v3",
-				With: map[string]string{
-					"sarif_file": "trivy-results.sarif",
-				},
-				If: "{{ .Inputs.trivyScanEnabled }} && always()",
-			},
-		},
+		Inputs:      allInputs,
+		Steps:       steps,
 	}
 }
 
 func getPythonAppTemplate() *Template {
+	// Create base inputs for Python language
+	baseInputs := map[string]Input{
+		"pythonVersion":  createLanguageVersionInput("Python", config.DefaultValues["pythonVersion"].(string), config.LanguageVersions["python"]),
+		"packageManager": createPackageManagerInput(config.DefaultValues["packageManager"].(map[string]string)["python"], config.PackageManagers["python"]),
+		"testCommand":    createCommandInput("Command to run tests", config.DefaultValues["testCommand"].(map[string]string)["python"], true),
+		"lintCommand":    createCommandInput("Command to run linting", config.DefaultValues["lintCommand"].(map[string]string)["python"], false),
+		"requirements": {
+			Type:        "string",
+			Description: "Requirements file path",
+			Default:     config.DefaultValues["requirements"].(map[string]string)["python"],
+			Required:    true,
+		},
+	}
+
+	// Merge with security and container inputs
+	allInputs := mergeInputs(baseInputs, createSecurityInputs(), createContainerInputs())
+
+	// Create base steps
+	steps := []Step{
+		createCheckoutStep(),
+		{
+			ID:   "setup-python",
+			Name: "Setup Python",
+			Uses: "actions/setup-python@v4",
+			With: map[string]string{
+				"python-version": "{{ .Inputs.pythonVersion }}",
+				"cache":          "{{ .Inputs.packageManager }}",
+			},
+		},
+		{
+			ID:   "install",
+			Name: "Install dependencies",
+			Run:  "{{ if eq .Inputs.packageManager \"pip\" }}pip install -r {{ .Inputs.requirements }}{{ else if eq .Inputs.packageManager \"poetry\" }}poetry install{{ else }}pipenv install{{ end }}",
+		},
+		{
+			ID:   "lint",
+			Name: "Run linting",
+			Run:  "{{ .Inputs.lintCommand }}",
+			If:   "{{ .Inputs.lintCommand }}",
+		},
+		{
+			ID:   "test",
+			Name: "Run tests",
+			Run:  "{{ .Inputs.testCommand }}",
+		},
+	}
+
+	// Add security and container steps
+	steps = append(steps, createSecuritySteps()...)
+	steps = append(steps, createContainerSteps()...)
+
 	return &Template{
 		Name:        "python-app",
 		Description: "Python application with testing, linting, and packaging",
 		Version:     "1.0.0",
 		Author:      "GPGen Team",
 		Tags:        []string{"python", "web", "application"},
-		Inputs: map[string]Input{
-			"pythonVersion": {
-				Type:        "string",
-				Description: "Python version to use",
-				Default:     "3.11",
-				Required:    true,
-				Options:     []string{"3.9", "3.10", "3.11", "3.12"},
-			},
-			"packageManager": {
-				Type:        "string",
-				Description: "Package manager to use",
-				Default:     "pip",
-				Required:    true,
-				Options:     []string{"pip", "poetry", "pipenv"},
-			},
-			"testCommand": {
-				Type:        "string",
-				Description: "Command to run tests",
-				Default:     "pytest",
-				Required:    true,
-			},
-			"lintCommand": {
-				Type:        "string",
-				Description: "Command to run linting",
-				Default:     "flake8",
-				Required:    false,
-			},
-			"requirements": {
-				Type:        "string",
-				Description: "Requirements file path",
-				Default:     "requirements.txt",
-				Required:    true,
-			},
-		},
-		Steps: []Step{
-			{
-				ID:   "checkout",
-				Name: "Checkout code",
-				Uses: "actions/checkout@v4",
-			},
-			{
-				ID:   "setup-python",
-				Name: "Setup Python",
-				Uses: "actions/setup-python@v4",
-				With: map[string]string{
-					"python-version": "{{ .Inputs.pythonVersion }}",
-					"cache":          "{{ .Inputs.packageManager }}",
+		Inputs:      allInputs,
+		Steps:       steps,
+	}
+}
+
+// Helper functions for creating common inputs and steps
+
+// createLanguageVersionInput creates a version input for a programming language
+func createLanguageVersionInput(language string, defaultVersion string, versions []string) Input {
+	return Input{
+		Type:        "string",
+		Description: fmt.Sprintf("%s version to use", language),
+		Default:     defaultVersion,
+		Required:    true,
+		Options:     versions,
+	}
+}
+
+// createPackageManagerInput creates a package manager input
+func createPackageManagerInput(defaultManager string, options []string) Input {
+	return Input{
+		Type:        "string",
+		Description: "Package manager to use",
+		Default:     defaultManager,
+		Required:    true,
+		Options:     options,
+	}
+}
+
+// createCommandInput creates a command input
+func createCommandInput(description string, defaultCmd string, required bool) Input {
+	return Input{
+		Type:        "string",
+		Description: description,
+		Default:     defaultCmd,
+		Required:    required,
+	}
+}
+
+// createSecurityInputs creates the standard security configuration inputs
+func createSecurityInputs() map[string]Input {
+	return map[string]Input{
+		"security": {
+			Type:        "object",
+			Description: "Security scanning configuration",
+			Default: map[string]interface{}{ // default security settings
+				"trivy": map[string]interface{}{ // trivy object
+					"enabled":  true,
+					"severity": "CRITICAL,HIGH",
+					"exitCode": "1",
 				},
 			},
-			{
-				ID:   "install",
-				Name: "Install dependencies",
-				Run:  "{{ if eq .Inputs.packageManager \"pip\" }}pip install -r {{ .Inputs.requirements }}{{ else if eq .Inputs.packageManager \"poetry\" }}poetry install{{ else }}pipenv install{{ end }}",
+			Required: false,
+		},
+	}
+}
+
+// createContainerInputs creates the standard container configuration inputs
+func createContainerInputs() map[string]Input {
+	return map[string]Input{
+		"container": {
+			Type:        "object",
+			Description: "Container building and registry configuration",
+			Default: map[string]interface{}{ // default container settings
+				"enabled":      false,
+				"registry":     "ghcr.io",
+				"imageName":    "${{ github.repository }}",
+				"imageTag":     "${{ github.sha }}",
+				"dockerfile":   "Dockerfile",
+				"buildContext": ".",
+				"buildArgs":    "{}",
+				"push": map[string]interface{}{ // push settings
+					"enabled":      true,
+					"onProduction": true,
+				},
+				"build": map[string]interface{}{ // build settings
+					"alwaysBuild":  false,
+					"alwaysPush":   false,
+					"onPR":         true,
+					"onProduction": true,
+				},
 			},
-			{
-				ID:   "lint",
-				Name: "Run linting",
-				Run:  "{{ .Inputs.lintCommand }}",
-				If:   "{{ .Inputs.lintCommand }}",
+			Required: false,
+		},
+	}
+}
+
+// mergeInputs merges multiple input maps
+func mergeInputs(inputMaps ...map[string]Input) map[string]Input {
+	result := make(map[string]Input)
+	for _, inputMap := range inputMaps {
+		for key, value := range inputMap {
+			result[key] = value
+		}
+	}
+	return result
+}
+
+// Common step definitions
+
+// createCheckoutStep creates a standard checkout step
+func createCheckoutStep() Step {
+	return Step{
+		ID:   "checkout",
+		Name: "Checkout code",
+		Uses: "actions/checkout@v4",
+	}
+}
+
+// createSecuritySteps creates standard security scanning steps
+func createSecuritySteps() []Step {
+	return []Step{
+		{
+			ID:   "security-scan",
+			Name: "Run Trivy vulnerability scanner",
+			Uses: "aquasecurity/trivy-action@master",
+			With: map[string]string{
+				"scan-type": "fs",
+				"scan-ref":  ".",
+				"format":    "sarif",
+				"output":    "trivy-results.sarif",
+				"severity":  "{{ .Inputs.security.trivy.severity }}",
+				"exit-code": "1",
 			},
-			{
-				ID:   "test",
-				Name: "Run tests",
-				Run:  "{{ .Inputs.testCommand }}",
+			If: "{{ .Inputs.security.trivy.enabled }}",
+		},
+		{
+			ID:   "upload-sarif",
+			Name: "Upload Trivy scan results to GitHub Security tab",
+			Uses: "github/codeql-action/upload-sarif@v3",
+			With: map[string]string{
+				"sarif_file": "trivy-results.sarif",
 			},
+			If: "{{ .Inputs.security.trivy.enabled }} && always()",
+		},
+	}
+}
+
+// createContainerSteps creates standard container building steps
+func createContainerSteps() []Step {
+	return []Step{
+		{
+			ID:   "setup-docker-buildx",
+			Name: "Set up Docker Buildx",
+			Uses: "docker/setup-buildx-action@v3",
+			If:   "{{ .Inputs.container.enabled }} && ({{ .Inputs.container.build.alwaysBuild }} || ({{ .Inputs.container.build.onPR }} && github.event_name == 'pull_request') || ({{ .Inputs.container.build.onProduction }} && (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || github.event_name == 'release')))",
+		},
+		{
+			ID:   "login-registry",
+			Name: "Log in to Container Registry",
+			Uses: "docker/login-action@v3",
+			With: map[string]string{
+				"registry": "{{ .Inputs.container.registry }}",
+				"username": "GITHUB_ACTOR_PLACEHOLDER",
+				"password": "GITHUB_TOKEN_PLACEHOLDER",
+			},
+			If: "{{ .Inputs.container.enabled }} && {{ .Inputs.container.push.enabled }} && ({{ .Inputs.container.push.alwaysPush }} || ({{ .Inputs.container.push.onProduction }} && (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || github.event_name == 'release')))",
+		},
+		{
+			ID:   "build-and-push",
+			Name: "Build and push container image",
+			Uses: "docker/build-push-action@v5",
+			With: map[string]string{
+				"context":    "{{ .Inputs.container.buildContext }}",
+				"file":       "{{ .Inputs.container.dockerfile }}",
+				"push":       "{{ .Inputs.container.push.enabled }}",
+				"tags":       "{{ .Inputs.container.registry }}/{{ .Inputs.container.imageName }}:{{ .Inputs.container.imageTag }}",
+				"build-args": "{{ .Inputs.container.buildArgs }}",
+				"cache-from": "type=gha",
+				"cache-to":   "type=gha,mode=max",
+			},
+			If: "{{ .Inputs.container.enabled }} && ({{ .Inputs.container.build.alwaysBuild }} || ({{ .Inputs.container.build.onPR }} && github.event_name == 'pull_request') || ({{ .Inputs.container.build.onProduction }} && (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || github.event_name == 'release')))",
 		},
 	}
 }
