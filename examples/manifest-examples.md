@@ -38,11 +38,21 @@ spec:
     deployEnvironments: ["staging", "production"]
 
   customSteps:
-    - name: "security-scan"
+    # Add Trivy scanning to Node.js template (requires manual permissions setup)
+    - name: "trivy-security-scan"
       position: "after:test"
-      uses: "securecodewarrior/github-action-add-sarif@v1"
+      uses: "aquasecurity/trivy-action@master"
       with:
-        sarif-file: "security-scan.sarif"
+        scan-type: "fs"
+        format: "sarif"
+        output: "trivy-results.sarif"
+        severity: "CRITICAL,HIGH"
+        
+    - name: "upload-trivy-results"
+      position: "after:trivy-security-scan"
+      uses: "github/codeql-action/upload-sarif@v3"
+      with:
+        sarif_file: "trivy-results.sarif"
 
     - name: "dependency-audit"
       position: "before:build"
@@ -51,9 +61,20 @@ spec:
         yarn audit --json > audit-results.json
       continue-on-error: false
       timeout-minutes: 10
+
+# Note: For Node.js templates with custom Trivy scanning, you'll need to manually 
+# add permissions to your workflow job:
+#
+# jobs:
+#   build:
+#     permissions:
+#       contents: read
+#       security-events: write
+#
+# The go-service template handles this automatically when trivyScanEnabled: true
 ```
 
-## 3. Go Service with Environment-Specific Configurations
+## 3. Go Service with Security Scanning and Environment-Specific Configurations
 
 ```yaml
 # gpgen.yaml
@@ -62,14 +83,17 @@ kind: Pipeline
 metadata:
   name: my-go-service
   annotations:
-    gpgen.dev/description: "Microservice with staging and production deployments"
+    gpgen.dev/description: "Microservice with Trivy security scanning and deployments"
 
 spec:
   template: "go-service"
 
   inputs:
-    goVersion: "1.24"
+    goVersion: "1.22"
     deployEnvironments: ["staging", "production"]
+    # Security scanning with Trivy (automatically adds GitHub Security tab permissions)
+    trivyScanEnabled: true
+    trivySeverity: "CRITICAL,HIGH"
 
   # Global custom step
   customSteps:
@@ -92,6 +116,8 @@ spec:
       inputs:
         deployTarget: "staging-k8s-cluster"
         replicas: 2
+        # More relaxed security scanning for staging
+        trivySeverity: "CRITICAL,HIGH,MEDIUM"
       customSteps:
         - name: "staging-smoke-test"
           position: "after:deploy"
@@ -104,6 +130,8 @@ spec:
       inputs:
         deployTarget: "prod-k8s-cluster"
         replicas: 5
+        # Strict security scanning for production (CRITICAL only)
+        trivySeverity: "CRITICAL"
       overrides:
         deploy:
           timeout-minutes: 45
@@ -127,7 +155,60 @@ spec:
           if: "success()"
 ```
 
-## 4. Advanced Node.js App with Relaxed Validation
+## 4. Security-First Go Service
+
+```yaml
+# gpgen.yaml - Enterprise security scanning configuration
+apiVersion: gpgen.dev/v1
+kind: Pipeline
+metadata:
+  name: secure-go-service
+  annotations:
+    gpgen.dev/description: "Go service with comprehensive security scanning"
+
+spec:
+  template: "go-service"
+
+  inputs:
+    goVersion: "1.23"
+    # Enable Trivy vulnerability scanning (automatically adds security-events: write permission)
+    trivyScanEnabled: true
+    trivySeverity: "CRITICAL,HIGH,MEDIUM"
+
+  customSteps:
+    # Additional security scanning
+    - name: "gosec-security-scan"
+      position: "after:test"
+      run: |
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        gosec -fmt sarif -out gosec-results.sarif ./...
+      
+    - name: "upload-gosec-results"
+      position: "after:gosec-security-scan"
+      uses: "github/codeql-action/upload-sarif@v3"
+      with:
+        sarif_file: "gosec-results.sarif"
+        category: "gosec"
+
+  environments:
+    staging:
+      inputs:
+        # Disable Trivy in staging to speed up builds (removes security permissions)
+        trivyScanEnabled: false
+
+    production:
+      inputs:
+        # Maximum security for production
+        trivySeverity: "CRITICAL"
+      customSteps:
+        - name: "compliance-check"
+          position: "before:deploy"
+          run: |
+            echo "Running compliance checks..."
+            ./scripts/compliance-scan.sh
+```
+
+## 5. Advanced Node.js App with Relaxed Validation
 
 ```yaml
 # gpgen.yaml - For teams that need escape hatches
@@ -174,7 +255,7 @@ spec:
         FEATURE_FLAGS: "${{ vars.FEATURE_FLAGS }}"
 ```
 
-## 5. Minimal Go Service
+## 6. Minimal Go Service
 
 ```yaml
 # gpgen.yaml - Simplest possible configuration
@@ -185,5 +266,7 @@ spec:
   template: "go-service"
 
   inputs:
-    goVersion: "1.24"
+    goVersion: "1.23"
+    # Trivy scanning enabled by default with CRITICAL,HIGH severity
+    # Automatically adds GitHub Security tab permissions
 ```

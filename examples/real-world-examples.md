@@ -72,7 +72,7 @@ spec:
 - Runs comprehensive test suite with performance tests
 - Includes all security and compliance checks
 
-## Go Microservice Pipeline
+## Go Microservice Pipeline with Security Scanning
 
 ### manifest.yaml
 ```yaml
@@ -80,12 +80,17 @@ apiVersion: gpgen.dev/v1
 kind: Pipeline
 metadata:
   name: user-service
+  annotations:
+    gpgen.dev/description: "Secure microservice with vulnerability scanning"
 spec:
   template: go-service
   inputs:
-    goVersion: "1.21"
+    goVersion: "1.22"
     testCommand: "go test -race -coverprofile=coverage.out ./..."
     buildCommand: "CGO_ENABLED=0 go build -o bin/user-service ./cmd/server"
+    # Enable Trivy security scanning with GitHub Security tab integration
+    trivyScanEnabled: true
+    trivySeverity: "CRITICAL,HIGH"
 
   customSteps:
     - name: Static Analysis
@@ -104,6 +109,9 @@ spec:
 
   environments:
     production:
+      inputs:
+        # Strictest security for production
+        trivySeverity: "CRITICAL"
       customSteps:
         - name: Push Docker Image
           position: replace:Build Docker Image
@@ -114,6 +122,74 @@ spec:
             tags: |
               user-service:latest
               user-service:${{ github.sha }}
+```
+
+### Generated Workflow Features
+
+#### Default Environment (.github/workflows/user-service.yml)
+- **Automatic permissions**: `contents: read` and `security-events: write` are automatically added
+- **Trivy scanning**: Runs vulnerability scanner with CRITICAL,HIGH severity
+- **SARIF upload**: Security results automatically uploaded to GitHub Security tab
+- **Static analysis**: Custom Go tooling integration
+
+#### Production Environment (.github/workflows/user-service-production.yml)
+- **Enhanced security**: Only CRITICAL vulnerabilities block deployment
+- **Container registry**: Secure image pushing to production registry
+- **All security features**: Inherits Trivy scanning with stricter settings
+
+### Sample Generated Workflow Output
+
+```yaml
+# .github/workflows/user-service.yml (generated)
+name: user-service
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # Automatically added for Trivy SARIF upload
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.22"
+          cache: "true"
+      - name: Run tests
+        run: go test -race -coverprofile=coverage.out ./...
+      - name: Static Analysis
+        run: |
+          go vet ./...
+          staticcheck ./...
+      - name: Build service
+        run: CGO_ENABLED=0 go build -o bin/user-service ./cmd/server
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+        if: "true"
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+        if: true && always()
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: user-service:${{ github.sha }}
 ```
 
 ## Python Data Pipeline
@@ -194,3 +270,56 @@ spec:
   inputs:
     nodeVersion: "18"
 ```
+
+## Security Features and Permissions
+
+### Automatic GitHub Security Tab Integration
+
+When using the `go-service` template with Trivy scanning enabled:
+
+```yaml
+inputs:
+  trivyScanEnabled: true  # Default: true
+  trivySeverity: "CRITICAL,HIGH"  # Configurable severity levels
+```
+
+GPGen automatically:
+1. **Adds required permissions** to the workflow:
+   - `contents: read` - Required for checking out code
+   - `security-events: write` - Required for uploading SARIF results
+
+2. **Configures Trivy scanning** with:
+   - Filesystem scanning of the repository
+   - SARIF output format for GitHub Security tab
+   - Configurable severity levels (CRITICAL, HIGH, MEDIUM, LOW)
+   - Automatic upload to GitHub Security tab
+
+3. **Handles conditional behavior**:
+   - When `trivyScanEnabled: false`, no security permissions are added
+   - Scanning runs on all environments unless explicitly disabled
+   - SARIF upload runs even if Trivy finds vulnerabilities (`always()` condition)
+
+### Security Best Practices
+
+```yaml
+# Recommended security configuration
+spec:
+  template: go-service
+  inputs:
+    trivyScanEnabled: true
+    trivySeverity: "CRITICAL,HIGH"  # Block on serious vulnerabilities
+    
+  environments:
+    staging:
+      inputs:
+        trivySeverity: "CRITICAL,HIGH,MEDIUM"  # More comprehensive scanning
+    production:
+      inputs:
+        trivySeverity: "CRITICAL"  # Only critical issues block production
+```
+
+This ensures that:
+- Development gets feedback on all security issues
+- Staging catches medium-severity vulnerabilities  
+- Production deployments are only blocked by critical security issues
+- All security findings are tracked in GitHub's Security tab for compliance and auditing

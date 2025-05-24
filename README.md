@@ -122,12 +122,20 @@ GPGen includes production-ready templates for common project types:
 
 ### Go Template (`go-service`)
 **Perfect for**: Microservices, CLI tools, backend services
-**Included Steps**: Checkout, Go setup, module download, testing, building
+**Included Steps**: Checkout, Go setup, module download, testing, building, security scanning
+**Security Features**: Built-in Trivy vulnerability scanning with GitHub Security tab integration
 **Configurable Inputs**:
-- `goVersion`: Go version (default: "1.21")
+- `goVersion`: Go version (default: "1.21", supports: "1.21", "1.22", "1.23", "1.24")
 - `testCommand`: Test execution command (default: "go test ./...")
 - `buildCommand`: Build command (default: "go build -o bin/app")
-- `lintEnabled`: Enable golangci-lint (default: true)
+- `trivyScanEnabled`: Enable Trivy vulnerability scanning (default: true)
+- `trivySeverity`: Security scan severity levels (default: "CRITICAL,HIGH")
+
+**Automatic Security Integration**:
+- When `trivyScanEnabled: true`, automatically adds required GitHub permissions (`contents: read`, `security-events: write`)
+- Scans filesystem for vulnerabilities using Trivy
+- Uploads SARIF results to GitHub Security tab for compliance tracking
+- Configurable severity thresholds (CRITICAL, HIGH, MEDIUM, LOW)
 
 ### Python Template (`python-app`)
 **Perfect for**: Web applications, data processing, ML services
@@ -197,6 +205,50 @@ spec:
 
 This manifest generates environment-specific workflows with security scanning, dependency checks, and custom deployment logic while maintaining the golden path structure.
 
+## Security Features
+
+GPGen includes built-in security scanning capabilities designed for enterprise compliance and developer productivity:
+
+### 🛡️ **Automated Vulnerability Scanning**
+
+The `go-service` template includes **Trivy security scanning** with automatic GitHub Security tab integration:
+
+```yaml
+spec:
+  template: go-service
+  inputs:
+    trivyScanEnabled: true  # Default: enabled
+    trivySeverity: "CRITICAL,HIGH"  # Configurable severity levels
+```
+
+**Automatic Features**:
+- **GitHub Permissions**: Automatically adds `contents: read` and `security-events: write` permissions
+- **SARIF Upload**: Security results are uploaded to GitHub's Security tab for tracking
+- **Compliance Ready**: SARIF format works with enterprise security workflows
+- **Flexible Thresholds**: Configure which severity levels block deployments
+
+### **Environment-Specific Security**
+
+Configure different security policies per environment:
+
+```yaml
+environments:
+  staging:
+    inputs:
+      trivySeverity: "CRITICAL,HIGH,MEDIUM"  # Comprehensive scanning for staging
+  production:
+    inputs:
+      trivySeverity: "CRITICAL"  # Only critical issues block production
+```
+
+### **Security Best Practices**
+
+- **Zero Configuration**: Security scanning enabled by default in `go-service` template
+- **Non-Blocking Development**: Staging environments can scan for all severities
+- **Production Safety**: Production deployments focus on critical vulnerabilities
+- **Audit Trail**: All security findings tracked in GitHub Security tab
+- **Extensible**: Add custom security scanning steps for other templates
+
 ## Project Structure
 
 ```
@@ -239,16 +291,24 @@ This manifest generates environment-specific workflows with security scanning, d
 
 **Template System**
 - [x] **Node.js Template**: Production-ready workflow with testing, building, caching
-- [x] **Go Service Template**: Go-specific pipeline with modules, testing, building
+- [x] **Go Service Template**: Go-specific pipeline with modules, testing, building, security scanning
 - [x] **Python Template**: Python application pipeline with virtual environments
 - [x] **Template Schema**: Input validation schemas for each template type
 - [x] **Template Discovery**: Automatic template loading and validation
+- [x] **Security Integration**: Built-in Trivy vulnerability scanning for Go services
 
 **Workflow Generation**
 - [x] **Template Engine**: Load templates and inject custom steps with input substitution
 - [x] **Step Positioning**: Fully implemented before/after/replace logic with smart matching
 - [x] **Environment Processing**: Generate environment-specific workflows with different triggers
 - [x] **Output Management**: GitHub Actions YAML generation with proper formatting
+- [x] **Permission Management**: Automatic GitHub permissions based on template features
+
+**Security & Compliance**
+- [x] **Vulnerability Scanning**: Trivy integration with SARIF output format
+- [x] **GitHub Security Tab**: Automatic SARIF upload for compliance tracking
+- [x] **Configurable Thresholds**: Environment-specific security severity levels
+- [x] **Zero-Config Security**: Default security scanning enabled in go-service template
 
 ### 🔮 **Phase 3: Advanced Features (PLANNED)**
 
@@ -258,6 +318,7 @@ This manifest generates environment-specific workflows with security scanning, d
 - [ ] **Matrix Builds**: Multi-platform and multi-version testing
 - [ ] **Secret Management**: Secure secret injection and rotation
 - [ ] **Policy Enforcement**: Organization-wide pipeline policies
+- [ ] **Advanced Security**: Custom security scanning integrations for all templates
 
 **Developer Experience**
 - [ ] **IDE Integration**: VS Code extension with manifest editing support
@@ -268,13 +329,13 @@ This manifest generates environment-specific workflows with security scanning, d
 **Integration & Ecosystem**
 - [ ] **CI/CD Platform Support**: GitLab CI, Azure DevOps, Jenkins adapters
 - [ ] **Monitoring Integration**: Pipeline observability and metrics
-- [ ] **Security Scanning**: Built-in vulnerability and compliance checking
 - [ ] **Documentation Generation**: Automatic pipeline documentation
 
-### 📊 **Current Progress: 85% Complete (Core MVP)**
+### 📊 **Current Progress: 90% Complete (Core MVP + Security)**
 
 - ✅ **Foundation**: Solid architecture and core parsing (100%)
 - ✅ **CLI & Templates**: Fully functional CLI with 3 templates (100%)
+- ✅ **Security Integration**: Trivy vulnerability scanning with GitHub Security tab (100%)
 - 📋 **Advanced Features**: Planning phase (0%)
 
 ## Getting Started
@@ -313,11 +374,33 @@ go install github.com/your-org/gpgen/cmd/gpgen@latest
 
 1. **Initialize a new project**:
    ```bash
-   gpgen init --template node-app --name my-awesome-app
+   gpgen init --template go-service --name my-secure-service
    ```
 
 2. **Customize your manifest** (`manifest.yaml`):
-   - Add custom steps for your specific needs
+   ```yaml
+   apiVersion: gpgen.dev/v1
+   kind: Pipeline
+   metadata:
+     name: my-secure-service
+   spec:
+     template: go-service
+     inputs:
+       goVersion: "1.22"
+       # Security scanning enabled by default
+       trivyScanEnabled: true
+       trivySeverity: "CRITICAL,HIGH"
+   ```
+
+3. **Generate workflows with automatic security integration**:
+   ```bash
+   gpgen generate manifest.yaml
+   ```
+
+The generated workflow automatically includes:
+- Required GitHub permissions (`contents: read`, `security-events: write`)
+- Trivy vulnerability scanning with configurable severity thresholds
+- SARIF upload to GitHub Security tab for compliance tracking
    - Configure environment-specific settings
    - Set validation mode (strict for production)
 
