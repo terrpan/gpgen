@@ -1,0 +1,49 @@
+apiVersion: gpgen.dev/v1
+kind: Pipeline
+metadata:
+  name: complex-demo
+  annotations:
+    gpgen.dev/description: "Demo with custom steps"
+spec:
+  template: node-app
+  inputs:
+    nodeVersion: "20"
+    packageManager: npm
+    testCommand: npm run test:ci
+  customSteps:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+echo "   ✅ Validation system robust"echo "   ✅ Environment overrides"echo "   ✅ Custom steps positioning"echo "   ✅ Workflow generation working"echo "   ✅ Template system functional" echo "   ✅ CLI commands working"echo "🎉 GPGen Phase 2 demonstration successful!"rm -rf manifest.yaml complex-manifest.yaml .github/echo "🧹 Cleaning up demo files..."echols -la .github/workflows/echo "✅ Demo complete! Generated files:"echo./bin/gpgen generate complex-manifest.yaml --environment productionecho "🔨 Generating complex workflow..."echo./bin/gpgen validate complex-manifest.yaml --strictecho "🔍 Validating complex manifest..."EOF        testCommand: npm run test:all      inputs:    production:  environments:      run: echo "Checking code quality..."      position: before:build    - name: Code Quality      run: echo "Running security scan..."      position: after:test    - name: Security Scan

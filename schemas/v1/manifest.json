@@ -1,0 +1,249 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://gpgen.dev/schemas/v1/manifest.json",
+    "title": "GPGen Pipeline Manifest",
+    "description": "Schema for GPGen pipeline manifest files",
+    "type": "object",
+    "required": [
+        "apiVersion",
+        "kind",
+        "spec"
+    ],
+    "properties": {
+        "apiVersion": {
+            "type": "string",
+            "enum": [
+                "gpgen.dev/v1"
+            ],
+            "description": "API version for the manifest format"
+        },
+        "kind": {
+            "type": "string",
+            "enum": [
+                "Pipeline"
+            ],
+            "description": "Type of resource being defined"
+        },
+        "metadata": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9-]+$",
+                    "description": "Name of the pipeline (lowercase, alphanumeric, hyphens)"
+                },
+                "annotations": {
+                    "type": "object",
+                    "properties": {
+                        "gpgen.dev/validation-mode": {
+                            "type": "string",
+                            "enum": [
+                                "strict",
+                                "relaxed"
+                            ],
+                            "default": "strict",
+                            "description": "Validation mode for the pipeline"
+                        },
+                        "gpgen.dev/description": {
+                            "type": "string",
+                            "description": "Human-readable description of the pipeline"
+                        }
+                    },
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "spec": {
+            "type": "object",
+            "required": [
+                "template"
+            ],
+            "properties": {
+                "template": {
+                    "type": "string",
+                    "enum": [
+                        "node-app",
+                        "go-service"
+                    ],
+                    "description": "Golden path template to use as the base"
+                },
+                "inputs": {
+                    "type": "object",
+                    "description": "Input parameters for the template",
+                    "additionalProperties": true,
+                    "properties": {
+                        "nodeVersion": {
+                            "type": "string",
+                            "description": "Node.js version (for node-app template)"
+                        },
+                        "goVersion": {
+                            "type": "string",
+                            "description": "Go version (for go-service template)"
+                        },
+                        "packageManager": {
+                            "type": "string",
+                            "enum": [
+                                "npm",
+                                "yarn",
+                                "pnpm"
+                            ],
+                            "description": "Package manager to use (for node-app template)"
+                        },
+                        "deployEnvironments": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "List of deployment environments"
+                        }
+                    }
+                },
+                "customSteps": {
+                    "type": "array",
+                    "description": "Custom steps to add or replace in the workflow",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "name",
+                            "position"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Name of the custom step"
+                            },
+                            "position": {
+                                "type": "string",
+                                "pattern": "^(before|after|replace):[a-z0-9-]+$",
+                                "description": "Where to position the step (e.g., 'after:test', 'before:deploy', 'replace:build')"
+                            },
+                            "uses": {
+                                "type": "string",
+                                "description": "GitHub Action to use (e.g., 'actions/checkout@v4')"
+                            },
+                            "run": {
+                                "type": "string",
+                                "description": "Shell command(s) to run"
+                            },
+                            "with": {
+                                "type": "object",
+                                "description": "Input parameters for the action",
+                                "additionalProperties": true
+                            },
+                            "env": {
+                                "type": "object",
+                                "description": "Environment variables for the step",
+                                "additionalProperties": {
+                                    "type": "string"
+                                }
+                            },
+                            "if": {
+                                "type": "string",
+                                "description": "Conditional expression for step execution"
+                            },
+                            "timeout-minutes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 360,
+                                "description": "Timeout for the step in minutes"
+                            },
+                            "continue-on-error": {
+                                "type": "boolean",
+                                "description": "Whether to continue workflow if step fails"
+                            }
+                        },
+                        "oneOf": [
+                            {
+                                "required": [
+                                    "uses"
+                                ]
+                            },
+                            {
+                                "required": [
+                                    "run"
+                                ]
+                            }
+                        ]
+                    }
+                },
+                "overrides": {
+                    "type": "object",
+                    "description": "Overrides for existing template steps",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Override step name"
+                            },
+                            "uses": {
+                                "type": "string",
+                                "description": "Override action to use"
+                            },
+                            "run": {
+                                "type": "string",
+                                "description": "Override shell command"
+                            },
+                            "with": {
+                                "type": "object",
+                                "description": "Override action inputs",
+                                "additionalProperties": true
+                            },
+                            "env": {
+                                "type": "object",
+                                "description": "Override environment variables",
+                                "additionalProperties": {
+                                    "type": "string"
+                                }
+                            },
+                            "timeout-minutes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 360,
+                                "description": "Override timeout"
+                            },
+                            "continue-on-error": {
+                                "type": "boolean",
+                                "description": "Override error handling"
+                            },
+                            "if": {
+                                "type": "string",
+                                "description": "Override conditional expression"
+                            }
+                        }
+                    }
+                },
+                "environments": {
+                    "type": "object",
+                    "description": "Environment-specific configurations",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "inputs": {
+                                "type": "object",
+                                "description": "Environment-specific input overrides",
+                                "additionalProperties": true
+                            },
+                            "customSteps": {
+                                "type": "array",
+                                "description": "Environment-specific custom steps",
+                                "items": {
+                                    "$ref": "#/spec/properties/customSteps/items"
+                                }
+                            },
+                            "overrides": {
+                                "type": "object",
+                                "description": "Environment-specific step overrides",
+                                "additionalProperties": {
+                                    "$ref": "#/spec/properties/overrides/additionalProperties"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

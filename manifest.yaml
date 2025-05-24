@@ -1,0 +1,32 @@
+apiVersion: gpgen.dev/v1
+kind: Pipeline
+metadata:
+  name: gpgen
+  annotations:
+    gpgen.dev/validation-mode: relaxed
+    gpgen.dev/description: "Node.js application pipeline"
+spec:
+  template: node-app
+  inputs:
+    nodeVersion: "18"
+    packageManager: npm
+    testCommand: "npm test"
+    buildCommand: "npm run build"
+
+  # Add custom steps here
+  customSteps: []
+
+  # Environment-specific configurations
+  environments:
+    staging:
+      annotations:
+        gpgen.dev/validation-mode: strict
+      inputs:
+        testCommand: "npm run test:ci"
+
+    production:
+      annotations:
+        gpgen.dev/validation-mode: strict
+      inputs:
+        nodeVersion: "20"
+        testCommand: "npm run test:all"
