@@ -59,9 +59,6 @@ Temporary Items
 coverage.out
 coverage.html
 
-# Generated workflows (for testing)
-.github/workflows/
-
 # Test manifests
 test-*.yaml
 *-test.yaml
