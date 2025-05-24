@@ -483,3 +483,60 @@ func TestWorkflowGenerator_Integration(t *testing.T) {
 		assert.Contains(t, workflow, "release:")
 	})
 }
+
+func TestWorkflowGenerator_GetRequiredPermissions(t *testing.T) {
+	generator := NewWorkflowGenerator("")
+
+	tests := []struct {
+		name        string
+		inputs      map[string]interface{}
+		expected    map[string]string
+		description string
+	}{
+		{
+			name: "trivy scanning enabled",
+			inputs: map[string]interface{}{
+				"trivyScanEnabled": true,
+				"goVersion":        "1.22",
+			},
+			expected: map[string]string{
+				"security-events": "write",
+				"contents":        "read",
+			},
+			description: "Should add security permissions when Trivy scanning is enabled",
+		},
+		{
+			name: "trivy scanning disabled",
+			inputs: map[string]interface{}{
+				"trivyScanEnabled": false,
+				"goVersion":        "1.22",
+			},
+			expected:    map[string]string{},
+			description: "Should not add permissions when Trivy scanning is disabled",
+		},
+		{
+			name: "trivy scanning not specified",
+			inputs: map[string]interface{}{
+				"goVersion": "1.22",
+			},
+			expected:    map[string]string{},
+			description: "Should not add permissions when Trivy scanning is not specified",
+		},
+		{
+			name: "trivy scanning enabled as string (should not trigger)",
+			inputs: map[string]interface{}{
+				"trivyScanEnabled": "true",
+				"goVersion":        "1.22",
+			},
+			expected:    map[string]string{},
+			description: "Should not add permissions when trivyScanEnabled is not a boolean",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := generator.getRequiredPermissions(nil, tt.inputs)
+			assert.Equal(t, tt.expected, result, tt.description)
+		})
+	}
+}

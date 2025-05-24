@@ -32,8 +32,9 @@ type GitHubActionsWorkflow struct {
 
 // Job represents a GitHub Actions job
 type Job struct {
-	RunsOn string         `yaml:"runs-on"`
-	Steps  []WorkflowStep `yaml:"steps"`
+	RunsOn      string            `yaml:"runs-on"`
+	Permissions map[string]string `yaml:"permissions,omitempty"`
+	Steps       []WorkflowStep    `yaml:"steps"`
 }
 
 // WorkflowStep represents a GitHub Actions workflow step
@@ -75,8 +76,9 @@ func (g *WorkflowGenerator) GenerateWorkflow(m *manifest.Manifest, environment s
 		On:   g.getWorkflowTriggers(m, environment),
 		Jobs: map[string]Job{
 			"build": {
-				RunsOn: "ubuntu-latest",
-				Steps:  steps,
+				RunsOn:      "ubuntu-latest",
+				Permissions: g.getRequiredPermissions(tmpl, inputs),
+				Steps:       steps,
 			},
 		},
 	}
@@ -395,4 +397,22 @@ func (g *WorkflowGenerator) getWorkflowTriggers(m *manifest.Manifest, environmen
 	}
 
 	return triggers
+}
+
+// getRequiredPermissions determines the required permissions for the workflow
+func (g *WorkflowGenerator) getRequiredPermissions(tmpl *templates.Template, inputs map[string]interface{}) map[string]string {
+	permissions := make(map[string]string)
+
+	// Check if Trivy scanning is enabled
+	if trivyScanEnabled, exists := inputs["trivyScanEnabled"]; exists {
+		if enabled, ok := trivyScanEnabled.(bool); ok && enabled {
+			// Add permissions required for uploading SARIF results to GitHub Security tab
+			permissions["security-events"] = "write"
+			permissions["contents"] = "read"
+		}
+	}
+
+	// Add other permission checks here as needed for different templates/features
+
+	return permissions
 }
