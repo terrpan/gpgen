@@ -97,6 +97,24 @@
                                 "type": "string"
                             },
                             "description": "List of deployment environments"
+                        },
+                        "trivyScanEnabled": {
+                            "type": "boolean",
+                            "description": "Enable Trivy vulnerability scanning (for go-service template)",
+                            "default": true
+                        },
+                        "trivySeverity": {
+                            "type": "string",
+                            "description": "Trivy scan severity levels (for go-service template)",
+                            "default": "CRITICAL,HIGH",
+                            "enum": [
+                                "CRITICAL",
+                                "HIGH",
+                                "MEDIUM",
+                                "LOW",
+                                "CRITICAL,HIGH",
+                                "CRITICAL,HIGH,MEDIUM"
+                            ]
                         }
                     }
                 },

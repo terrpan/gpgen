@@ -1,0 +1,39 @@
+name: gpgen (staging)
+"on":
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+      - develop
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          cache: "true"
+          go-version: "1.21"
+      - name: Run tests
+        run: go test -race ./...
+      - name: Build service
+        run: go build -o bin/gpgen ./cmd/gpgen
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          exit-code: "1"
+          format: sarif
+          output: trivy-results.sarif
+          scan-ref: .
+          scan-type: fs
+          severity: CRITICAL,HIGH,MEDIUM
+        if: "true"
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+        if: true && always()

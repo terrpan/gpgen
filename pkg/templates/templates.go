@@ -253,6 +253,19 @@ func getGoServiceTemplate() *Template {
 				Default:     "linux/amd64,darwin/amd64",
 				Required:    false,
 			},
+			"trivyScanEnabled": {
+				Type:        "boolean",
+				Description: "Enable Trivy vulnerability scanning",
+				Default:     true,
+				Required:    false,
+			},
+			"trivySeverity": {
+				Type:        "string",
+				Description: "Trivy scan severity levels",
+				Default:     "CRITICAL,HIGH",
+				Required:    false,
+				Options:     []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "CRITICAL,HIGH", "CRITICAL,HIGH,MEDIUM"},
+			},
 		},
 		Steps: []Step{
 			{
@@ -278,6 +291,29 @@ func getGoServiceTemplate() *Template {
 				ID:   "build",
 				Name: "Build service",
 				Run:  "{{ .Inputs.buildCommand }}",
+			},
+			{
+				ID:   "security-scan",
+				Name: "Run Trivy vulnerability scanner",
+				Uses: "aquasecurity/trivy-action@master",
+				With: map[string]string{
+					"scan-type": "fs",
+					"scan-ref":  ".",
+					"format":    "sarif",
+					"output":    "trivy-results.sarif",
+					"severity":  "{{ .Inputs.trivySeverity }}",
+					"exit-code": "1",
+				},
+				If: "{{ .Inputs.trivyScanEnabled }}",
+			},
+			{
+				ID:   "upload-sarif",
+				Name: "Upload Trivy scan results to GitHub Security tab",
+				Uses: "github/codeql-action/upload-sarif@v3",
+				With: map[string]string{
+					"sarif_file": "trivy-results.sarif",
+				},
+				If: "{{ .Inputs.trivyScanEnabled }} && always()",
 			},
 		},
 	}

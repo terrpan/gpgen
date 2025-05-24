@@ -1,17 +1,19 @@
 apiVersion: gpgen.dev/v1
 kind: Pipeline
 metadata:
-  name: gpgen-build-pipeline
+  name: gpgen
   annotations:
     gpgen.dev/validation-mode: relaxed
-    gpgen.dev/description: "Go service pipeline"
+    gpgen.dev/description: "Go service pipeline with security scanning"
 spec:
   template: go-service
   inputs:
-    goVersion: "1.24"
+    goVersion: "1.21"
     testCommand: "go test ./..."
     buildCommand: "go build -o bin/gpgen ./cmd/gpgen"
     platforms: "linux/amd64,darwin/amd64"
+    trivyScanEnabled: true
+    trivySeverity: "CRITICAL,HIGH"
 
   # Add custom steps here
   customSteps: []
@@ -23,10 +25,12 @@ spec:
         gpgen.dev/validation-mode: strict
       inputs:
         testCommand: "go test -race ./..."
+        trivySeverity: "CRITICAL,HIGH,MEDIUM"
 
     production:
       annotations:
         gpgen.dev/validation-mode: strict
       inputs:
-        goVersion: "1.24"
+        goVersion: "1.22"
         testCommand: "go test -race -cover ./..."
+        trivySeverity: "CRITICAL"
