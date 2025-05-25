@@ -30,7 +30,7 @@ spec:
 ```
 
 ### Go Template (`go-service`)
-**Perfect for**: Microservices, CLI tools, backend services  
+**Perfect for**: Microservices, CLI tools, backend services
 **Included Steps**: Checkout, Go setup, module download, testing, building, security scanning, container building
 
 **Configurable Inputs**:
