@@ -210,7 +210,7 @@ ContainerCond.BuildCondition()
 
 **Available Condition Builders:**
 
-1. **ContainerConditions**: 
+1. **ContainerConditions**:
    - `BuildCondition()`: When to build container images
    - `PushCondition()`: When to push to registries
 
@@ -266,7 +266,7 @@ func TestContainerConditions(t *testing.T) {
 ### 📈 **Maintainability Benefits**
 
 1. **Centralized Management**: All hardcoded values in one place
-2. **Type Safety**: Compile-time validation prevents runtime errors  
+2. **Type Safety**: Compile-time validation prevents runtime errors
 3. **Consistent Logic**: Same conditional patterns across all templates
 4. **Easy Testing**: Each component can be tested in isolation
 5. **Future-Proof**: Easy to extend with new actions and conditions

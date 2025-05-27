@@ -377,7 +377,7 @@ The modular template architecture includes comprehensive testing for:
 ```go
 // conditions_test.go - Unit tests for modular components
 func TestGitHubActionVersions(t *testing.T)      // Action version constants
-func TestGitHubPlaceholders(t *testing.T)        // Placeholder constants  
+func TestGitHubPlaceholders(t *testing.T)        // Placeholder constants
 func TestConditionBuilder(t *testing.T)          // Condition building logic
 func TestContainerConditions(t *testing.T)       // Container-specific conditions
 func TestSecurityConditions(t *testing.T)        // Security-specific conditions
