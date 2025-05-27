@@ -4,41 +4,18 @@ import (
 	"fmt"
 
 	"github.com/terrpan/gpgen/pkg/config"
+	"github.com/terrpan/gpgen/pkg/models"
 )
 
+// Alias shared types from pkg/models for clarity
+// Template, Input, and Step are now aliased from pkg/models
 // Template represents a golden path template
-type Template struct {
-	Name        string           `yaml:"name"`
-	Description string           `yaml:"description"`
-	Version     string           `yaml:"version"`
-	Author      string           `yaml:"author"`
-	Tags        []string         `yaml:"tags"`
-	Inputs      map[string]Input `yaml:"inputs"`
-	Steps       []Step           `yaml:"steps"`
-}
+type Template = models.Template
 
 // Input defines a template input parameter
-type Input struct {
-	Type        string      `yaml:"type"` // string, number, boolean, array
-	Description string      `yaml:"description"`
-	Default     interface{} `yaml:"default"`
-	Required    bool        `yaml:"required"`
-	Options     []string    `yaml:"options,omitempty"` // For enum-like inputs
-	Pattern     string      `yaml:"pattern,omitempty"` // For validation
-}
-
 // Step represents a workflow step in a template
-type Step struct {
-	ID          string            `yaml:"id"`
-	Name        string            `yaml:"name"`
-	Uses        string            `yaml:"uses,omitempty"`
-	Run         string            `yaml:"run,omitempty"`
-	With        map[string]string `yaml:"with,omitempty"`
-	Env         map[string]string `yaml:"env,omitempty"`
-	If          string            `yaml:"if,omitempty"`
-	TimeoutMins int               `yaml:"timeout-minutes,omitempty"`
-	Position    string            `yaml:"position,omitempty"` // Internal: for step ordering
-}
+type Input = models.Input
+type Step = models.Step
 
 // TemplateManager handles template loading and management
 type TemplateManager struct {

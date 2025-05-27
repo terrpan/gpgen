@@ -183,6 +183,32 @@ func (wg *WorkflowGenerator) ApplyCustomStep(steps []Step, customStep CustomStep
 - Maintains workflow integrity
 - Handles edge cases and validation
 
+### `pkg/models/` - Shared Template Types
+
+**Purpose**: Holds shared data structures used by both `pkg/templates` and `pkg/generator`, avoiding circular imports.
+
+**Key Structures**:
+```go
+// Template defines a golden path with reusable inputs and steps
+type Template struct {
+    Name        string
+    Description string
+    Version     string
+    Author      string
+    Tags        []string
+    Inputs      map[string]Input
+    Steps       []Step
+}
+
+// Input defines parameters for templates
+// Step represents a GitHub Actions workflow step
+```
+
+**Benefits**:
+- Centralizes shared types in one place
+- Prevents import cycles between `templates` and `generator`
+- Clarifies package responsibilities
+
 ## Design Patterns & Principles
 
 ### 1. **DRY (Don't Repeat Yourself)**
