@@ -2,6 +2,27 @@
 
 This document provides comprehensive information about GPGen's built-in templates and how to use them effectively.
 
+## Template Architecture
+
+GPGen templates are built with a **modular, type-safe architecture** featuring:
+
+### 🏗️ **Centralized Constants**
+- **Action Versions**: All GitHub Actions versions managed in `GitHubActionVersions`
+- **Event Names**: Type-safe constants for GitHub events (`EventPullRequest`, `EventPush`, etc.)
+- **Ref Patterns**: Consistent ref matching patterns (`RefTagsPrefix`, `RefMainBranch`)
+- **Placeholders**: Centralized placeholder management (`GitHubPlaceholders`)
+
+### 🧩 **Modular Condition Builders**
+- **ConditionBuilder**: Fluent API for constructing complex conditional expressions
+- **ContainerConditions**: Pre-built conditions for container workflows
+- **SecurityConditions**: Standard conditions for security scanning
+
+### 📋 **Benefits**
+- **Type Safety**: Compile-time validation of all constants and conditions
+- **Maintainability**: Single location to update action versions and logic
+- **Consistency**: All templates use the same modular components
+- **Testability**: Each component is individually tested and validated
+
 ## Available Templates
 
 ### Node.js Template (`node-app`)
@@ -148,3 +169,106 @@ You can create your own templates by adding them to the templates directory. Eac
 - Environment-specific trigger configurations
 
 For detailed information on creating custom templates, see the [Architecture Documentation](ARCHITECTURE.md).
+
+## Modular Architecture Deep Dive
+
+### 🎯 **Centralized Constants** (`pkg/templates/conditions.go`)
+
+All action versions are managed centrally for consistency and easy maintenance:
+
+```go
+// GitHubActionVersions - Single source of truth for all action versions
+var GitHubActionVersions = struct {
+    Checkout         string  // "actions/checkout@v4"
+    SetupNode        string  // "actions/setup-node@v4"
+    SetupGo          string  // "actions/setup-go@v4"
+    DockerSetupBuildx string  // "docker/setup-buildx-action@v3"
+    // ... and more
+}{
+    Checkout:         "actions/checkout@v4",
+    SetupNode:        "actions/setup-node@v4",
+    // ...
+}
+```
+
+**Benefits:**
+- **Single Update Point**: Change `@v4` to `@v5` in one place, updates everywhere
+- **Type Safety**: Compile-time validation prevents typos
+- **IDE Support**: Auto-completion and refactoring support
+
+### 🧩 **Condition Builders**
+
+Complex conditional logic is now modular and readable:
+
+```go
+// Before: Hard to read and maintain
+"{{ .Inputs.container.enabled }} && ({{ .Inputs.container.build.alwaysBuild }} || ...)"
+
+// After: Clear, modular, and testable
+ContainerCond.BuildCondition()
+```
+
+**Available Condition Builders:**
+
+1. **ContainerConditions**: 
+   - `BuildCondition()`: When to build container images
+   - `PushCondition()`: When to push to registries
+
+2. **SecurityConditions**:
+   - `TrivyScanCondition()`: When to run security scans
+   - `TrivyUploadCondition()`: When to upload SARIF results
+
+3. **ConditionBuilder**: Fluent API for custom conditions
+   ```go
+   NewConditionBuilder().
+       WithInputCondition("myFeature.enabled").
+       WithEventEquals(EventPullRequest).
+       And()
+   ```
+
+### 🔧 **Practical Examples**
+
+**Updating Action Versions:**
+```go
+// Old approach: Find and replace across multiple files
+// "actions/checkout@v3" → "actions/checkout@v4" (error-prone)
+
+// New approach: Update one constant
+GitHubActionVersions.Checkout = "actions/checkout@v5"
+// Automatically updates all templates
+```
+
+**Adding New Conditional Logic:**
+```go
+// Old approach: Write complex template strings
+If: "{{ .Inputs.deploy.enabled }} && github.ref == 'refs/heads/main'"
+
+// New approach: Use or extend condition builders
+If: NewConditionBuilder().
+    WithInputCondition("deploy.enabled").
+    WithRefEquals(RefMainBranch).
+    And()
+```
+
+**Template Testing:**
+```go
+// All constants and conditions are thoroughly tested
+func TestGitHubActionVersions(t *testing.T) {
+    assert.Equal(t, "actions/checkout@v4", GitHubActionVersions.Checkout)
+}
+
+func TestContainerConditions(t *testing.T) {
+    condition := ContainerCond.BuildCondition()
+    assert.Contains(t, condition, "container.enabled")
+}
+```
+
+### 📈 **Maintainability Benefits**
+
+1. **Centralized Management**: All hardcoded values in one place
+2. **Type Safety**: Compile-time validation prevents runtime errors  
+3. **Consistent Logic**: Same conditional patterns across all templates
+4. **Easy Testing**: Each component can be tested in isolation
+5. **Future-Proof**: Easy to extend with new actions and conditions
+
+This modular architecture ensures GPGen templates remain maintainable and consistent as the project grows.
