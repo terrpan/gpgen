@@ -11,14 +11,14 @@ import (
 // Test constants to avoid SonarQube duplicate literal warnings
 const (
 	// Template condition strings for integration tests
-	integrationContainerEnabledTemplate = "{{ .Inputs.container.enabled }}"
-	integrationContainerBuildAlwaysBuildTemplate = "{{ .Inputs.container.build.alwaysBuild }}"
-	integrationContainerBuildOnPRTemplate = "{{ .Inputs.container.build.onPR }}"
-	integrationContainerBuildOnProductionTemplate = "{{ .Inputs.container.build.onProduction }}"
-	integrationContainerPushEnabledTemplate = "{{ .Inputs.container.push.enabled }}"
-	integrationContainerPushAlwaysPushTemplate = "{{ .Inputs.container.push.alwaysPush }}"
-	integrationContainerPushOnProductionTemplate = "{{ .Inputs.container.push.onProduction }}"
-	integrationSecurityTrivyEnabledTemplate = "{{ .Inputs.security.trivy.enabled }}"
+	integrationContainerEnabledTemplate               = "{{ .Inputs.container.enabled }}"
+	integrationContainerBuildAlwaysBuildTemplate      = "{{ .Inputs.container.build.alwaysBuild }}"
+	integrationContainerBuildOnPRTemplate             = "{{ .Inputs.container.build.onPR }}"
+	integrationContainerBuildOnProductionTemplate     = "{{ .Inputs.container.build.onProduction }}"
+	integrationContainerPushEnabledTemplate           = "{{ .Inputs.container.push.enabled }}"
+	integrationContainerPushAlwaysPushTemplate        = "{{ .Inputs.container.push.alwaysPush }}"
+	integrationContainerPushOnProductionTemplate      = "{{ .Inputs.container.push.onProduction }}"
+	integrationSecurityTrivyEnabledTemplate           = "{{ .Inputs.security.trivy.enabled }}"
 	integrationSecurityTrivyEnabledWithAlwaysTemplate = "{{ .Inputs.security.trivy.enabled }} && always()"
 )
 
@@ -471,37 +471,48 @@ func TestVersionConstants(t *testing.T) {
 
 		for _, tt := range templates {
 			t.Run(tt.name, func(t *testing.T) {
-				// Check that steps use proper version constants by validating against known good constants
-				for _, step := range tt.template.Steps {
-					if step.Uses != "" {
-						// Verify step uses one of our centralized version constants
-						isValidConstant := false
-						constantValues := []string{
-							GitHubActionVersions.Checkout,
-							GitHubActionVersions.SetupNode,
-							GitHubActionVersions.SetupGo,
-							GitHubActionVersions.SetupPython,
-							GitHubActionVersions.DockerSetupBuildx,
-							GitHubActionVersions.DockerLogin,
-							GitHubActionVersions.DockerBuildPush,
-							GitHubActionVersions.CodeQLUploadSARIF,
-							GitHubActionVersions.TrivyAction,
-						}
-
-						for _, constant := range constantValues {
-							if step.Uses == constant {
-								isValidConstant = true
-								break
-							}
-						}
-
-						assert.True(t, isValidConstant,
-							"Step %s uses '%s' which should be one of our centralized version constants", step.ID, step.Uses)
-					}
-				}
+				validateTemplateUsesVersionConstants(t, tt.template)
 			})
 		}
 	})
+}
+
+// validateTemplateUsesVersionConstants is a helper function to reduce cognitive complexity
+func validateTemplateUsesVersionConstants(t *testing.T, template *Template) {
+	t.Helper()
+	
+	validConstants := getValidVersionConstants()
+	
+	for _, step := range template.Steps {
+		if step.Uses != "" {
+			validateStepUsesVersionConstant(t, step, validConstants)
+		}
+	}
+}
+
+// getValidVersionConstants returns all valid centralized version constants
+func getValidVersionConstants() map[string]bool {
+	constants := map[string]bool{
+		GitHubActionVersions.Checkout:          true,
+		GitHubActionVersions.SetupNode:         true,
+		GitHubActionVersions.SetupGo:           true,
+		GitHubActionVersions.SetupPython:       true,
+		GitHubActionVersions.DockerSetupBuildx: true,
+		GitHubActionVersions.DockerLogin:       true,
+		GitHubActionVersions.DockerBuildPush:   true,
+		GitHubActionVersions.CodeQLUploadSARIF: true,
+		GitHubActionVersions.TrivyAction:       true,
+	}
+	return constants
+}
+
+// validateStepUsesVersionConstant validates a single step uses centralized constants
+func validateStepUsesVersionConstant(t *testing.T, step Step, validConstants map[string]bool) {
+	t.Helper()
+	
+	isValidConstant := validConstants[step.Uses]
+	assert.True(t, isValidConstant,
+		"Step %s uses '%s' which should be one of our centralized version constants", step.ID, step.Uses)
 }
 
 // TestConditionComplexity validates that conditions are properly structured
