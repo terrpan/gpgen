@@ -6,6 +6,37 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Test constants to avoid duplicate literal warnings
+const (
+	// Input condition strings
+	testContainerEnabledInput = "container.enabled"
+	testContainerEnabledTemplate = "{{ .Inputs.container.enabled }}"
+	testContainerBuildAlwaysBuildTemplate = "{{ .Inputs.container.build.alwaysBuild }}"
+	testContainerBuildOnPRTemplate = "{{ .Inputs.container.build.onPR }}"
+	testContainerBuildOnProductionTemplate = "{{ .Inputs.container.build.onProduction }}"
+	testContainerPushEnabledTemplate = "{{ .Inputs.container.push.enabled }}"
+	testContainerPushAlwaysPushTemplate = "{{ .Inputs.container.push.alwaysPush }}"
+	testContainerPushOnProductionTemplate = "{{ .Inputs.container.push.onProduction }}"
+	testSecurityTrivyEnabledInput = "security.trivy.enabled"
+	testSecurityTrivyEnabledTemplate = "{{ .Inputs.security.trivy.enabled }}"
+	testSecurityTrivyEnabledWithAlwaysTemplate = "{{ .Inputs.security.trivy.enabled }} && always()"
+
+	// GitHub event condition strings
+	testEventPushCondition = "github.event_name == 'push'"
+	testEventReleaseCondition = "github.event_name == 'release'"
+	testEventPullRequestCondition = "github.event_name == 'pull_request'"
+
+	// GitHub ref condition strings
+	testRefTagsStartsWithCondition = "startsWith(github.ref, 'refs/tags/')"
+
+	// Common event names for testing
+	testEventPush = "push"
+	testEventRelease = "release"
+
+	// Ref patterns for testing
+	testRefTagsPrefix = "refs/tags/"
+)
+
 func TestGitHubActionVersions(t *testing.T) {
 	t.Run("checkout version", func(t *testing.T) {
 		assert.Equal(t, "actions/checkout@v4", GitHubActionVersions.Checkout)
@@ -53,37 +84,37 @@ func TestConditionBuilder(t *testing.T) {
 	})
 
 	t.Run("single condition", func(t *testing.T) {
-		cb := NewConditionBuilder().WithInputCondition("container.enabled")
-		assert.Equal(t, "{{ .Inputs.container.enabled }}", cb.And())
-		assert.Equal(t, "{{ .Inputs.container.enabled }}", cb.Or())
+		cb := NewConditionBuilder().WithInputCondition(testContainerEnabledInput)
+		assert.Equal(t, testContainerEnabledTemplate, cb.And())
+		assert.Equal(t, testContainerEnabledTemplate, cb.Or())
 	})
 
 	t.Run("multiple conditions with AND", func(t *testing.T) {
 		cb := NewConditionBuilder().
-			WithInputCondition("container.enabled").
-			WithEventEquals("push")
-		expected := "{{ .Inputs.container.enabled }} && github.event_name == 'push'"
+			WithInputCondition(testContainerEnabledInput).
+			WithEventEquals(testEventPush)
+		expected := testContainerEnabledTemplate + " && " + testEventPushCondition
 		assert.Equal(t, expected, cb.And())
 	})
 
 	t.Run("multiple conditions with OR", func(t *testing.T) {
 		cb := NewConditionBuilder().
-			WithEventEquals("push").
-			WithEventEquals("release")
-		expected := "(github.event_name == 'push' || github.event_name == 'release')"
+			WithEventEquals(testEventPush).
+			WithEventEquals(testEventRelease)
+		expected := "(" + testEventPushCondition + " || " + testEventReleaseCondition + ")"
 		assert.Equal(t, expected, cb.Or())
 	})
 
 	t.Run("ref starts with condition", func(t *testing.T) {
-		cb := NewConditionBuilder().WithRefStartsWith("refs/tags/")
-		assert.Equal(t, "startsWith(github.ref, 'refs/tags/')", cb.And())
+		cb := NewConditionBuilder().WithRefStartsWith(testRefTagsPrefix)
+		assert.Equal(t, testRefTagsStartsWithCondition, cb.And())
 	})
 
 	t.Run("always condition", func(t *testing.T) {
 		cb := NewConditionBuilder().
-			WithInputCondition("security.trivy.enabled").
+			WithInputCondition(testSecurityTrivyEnabledInput).
 			WithAlways()
-		expected := "{{ .Inputs.security.trivy.enabled }} && always()"
+		expected := testSecurityTrivyEnabledWithAlwaysTemplate
 		assert.Equal(t, expected, cb.And())
 	})
 
@@ -94,16 +125,16 @@ func TestConditionBuilder(t *testing.T) {
 
 	t.Run("complex nested conditions", func(t *testing.T) {
 		innerCondition := NewConditionBuilder().
-			WithEventEquals("push").
-			WithRefStartsWith("refs/tags/").
+			WithEventEquals(testEventPush).
+			WithRefStartsWith(testRefTagsPrefix).
 			And()
 
 		outerCondition := NewConditionBuilder().
-			WithInputCondition("container.enabled").
+			WithInputCondition(testContainerEnabledInput).
 			WithCustomCondition(innerCondition).
 			And()
 
-		expected := "{{ .Inputs.container.enabled }} && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')"
+		expected := testContainerEnabledTemplate + " && " + testEventPushCondition + " && " + testRefTagsStartsWithCondition
 		assert.Equal(t, expected, outerCondition)
 	})
 }
@@ -113,14 +144,14 @@ func TestContainerConditions(t *testing.T) {
 		condition := ContainerCond.BuildCondition()
 
 		// Should contain all the main components
-		assert.Contains(t, condition, "{{ .Inputs.container.enabled }}")
-		assert.Contains(t, condition, "{{ .Inputs.container.build.alwaysBuild }}")
-		assert.Contains(t, condition, "{{ .Inputs.container.build.onPR }}")
-		assert.Contains(t, condition, "{{ .Inputs.container.build.onProduction }}")
-		assert.Contains(t, condition, "github.event_name == 'pull_request'")
-		assert.Contains(t, condition, "github.event_name == 'push'")
-		assert.Contains(t, condition, "startsWith(github.ref, 'refs/tags/')")
-		assert.Contains(t, condition, "github.event_name == 'release'")
+		assert.Contains(t, condition, testContainerEnabledTemplate)
+		assert.Contains(t, condition, testContainerBuildAlwaysBuildTemplate)
+		assert.Contains(t, condition, testContainerBuildOnPRTemplate)
+		assert.Contains(t, condition, testContainerBuildOnProductionTemplate)
+		assert.Contains(t, condition, testEventPullRequestCondition)
+		assert.Contains(t, condition, testEventPushCondition)
+		assert.Contains(t, condition, testRefTagsStartsWithCondition)
+		assert.Contains(t, condition, testEventReleaseCondition)
 
 		// Should be a well-formed condition (no dangling operators)
 		assert.NotContains(t, condition, " && )")
@@ -132,13 +163,13 @@ func TestContainerConditions(t *testing.T) {
 		condition := ContainerCond.PushCondition()
 
 		// Should contain all the main components
-		assert.Contains(t, condition, "{{ .Inputs.container.enabled }}")
-		assert.Contains(t, condition, "{{ .Inputs.container.push.enabled }}")
-		assert.Contains(t, condition, "{{ .Inputs.container.push.alwaysPush }}")
-		assert.Contains(t, condition, "{{ .Inputs.container.push.onProduction }}")
-		assert.Contains(t, condition, "github.event_name == 'push'")
-		assert.Contains(t, condition, "startsWith(github.ref, 'refs/tags/')")
-		assert.Contains(t, condition, "github.event_name == 'release'")
+		assert.Contains(t, condition, testContainerEnabledTemplate)
+		assert.Contains(t, condition, testContainerPushEnabledTemplate)
+		assert.Contains(t, condition, testContainerPushAlwaysPushTemplate)
+		assert.Contains(t, condition, testContainerPushOnProductionTemplate)
+		assert.Contains(t, condition, testEventPushCondition)
+		assert.Contains(t, condition, testRefTagsStartsWithCondition)
+		assert.Contains(t, condition, testEventReleaseCondition)
 
 		// Should be a well-formed condition
 		assert.NotContains(t, condition, " && )")
@@ -152,14 +183,14 @@ func TestContainerConditions(t *testing.T) {
 		// The condition should follow the pattern:
 		// container.enabled && (alwaysBuild || (onPR && pull_request) || (onProduction && (push+tags || release)))
 		expectedParts := []string{
-			"{{ .Inputs.container.enabled }}",
-			"{{ .Inputs.container.build.alwaysBuild }}",
-			"{{ .Inputs.container.build.onPR }}",
-			"github.event_name == 'pull_request'",
-			"{{ .Inputs.container.build.onProduction }}",
-			"github.event_name == 'push'",
-			"startsWith(github.ref, 'refs/tags/')",
-			"github.event_name == 'release'",
+			testContainerEnabledTemplate,
+			testContainerBuildAlwaysBuildTemplate,
+			testContainerBuildOnPRTemplate,
+			testEventPullRequestCondition,
+			testContainerBuildOnProductionTemplate,
+			testEventPushCondition,
+			testRefTagsStartsWithCondition,
+			testEventReleaseCondition,
 		}
 
 		for _, part := range expectedParts {
@@ -173,13 +204,13 @@ func TestContainerConditions(t *testing.T) {
 		// The condition should follow the pattern:
 		// container.enabled && push.enabled && (alwaysPush || (onProduction && (push+tags || release)))
 		expectedParts := []string{
-			"{{ .Inputs.container.enabled }}",
-			"{{ .Inputs.container.push.enabled }}",
-			"{{ .Inputs.container.push.alwaysPush }}",
-			"{{ .Inputs.container.push.onProduction }}",
-			"github.event_name == 'push'",
-			"startsWith(github.ref, 'refs/tags/')",
-			"github.event_name == 'release'",
+			testContainerEnabledTemplate,
+			testContainerPushEnabledTemplate,
+			testContainerPushAlwaysPushTemplate,
+			testContainerPushOnProductionTemplate,
+			testEventPushCondition,
+			testRefTagsStartsWithCondition,
+			testEventReleaseCondition,
 		}
 
 		for _, part := range expectedParts {
@@ -191,12 +222,12 @@ func TestContainerConditions(t *testing.T) {
 func TestSecurityConditions(t *testing.T) {
 	t.Run("trivy scan condition", func(t *testing.T) {
 		condition := SecurityCond.TrivyScanCondition()
-		assert.Equal(t, "{{ .Inputs.security.trivy.enabled }}", condition)
+		assert.Equal(t, testSecurityTrivyEnabledTemplate, condition)
 	})
 
 	t.Run("trivy upload condition", func(t *testing.T) {
 		condition := SecurityCond.TrivyUploadCondition()
-		expected := "{{ .Inputs.security.trivy.enabled }} && always()"
+		expected := testSecurityTrivyEnabledWithAlwaysTemplate
 		assert.Equal(t, expected, condition)
 	})
 }
@@ -224,8 +255,8 @@ func TestConditionBuilderChaining(t *testing.T) {
 		// Test that all methods return *ConditionBuilder for chaining
 		cb := NewConditionBuilder().
 			WithInputCondition("test.input").
-			WithEventEquals("push").
-			WithRefStartsWith("refs/tags/").
+			WithEventEquals(testEventPush).
+			WithRefStartsWith(testRefTagsPrefix).
 			WithAlways().
 			WithCustomCondition("custom()")
 
@@ -236,14 +267,14 @@ func TestConditionBuilderChaining(t *testing.T) {
 	t.Run("reusable builder", func(t *testing.T) {
 		// Test that builder can be reused for different output formats
 		cb := NewConditionBuilder().
-			WithEventEquals("push").
-			WithEventEquals("release")
+			WithEventEquals(testEventPush).
+			WithEventEquals(testEventRelease)
 
 		andResult := cb.And()
 		orResult := cb.Or()
 
-		assert.Equal(t, "github.event_name == 'push' && github.event_name == 'release'", andResult)
-		assert.Equal(t, "(github.event_name == 'push' || github.event_name == 'release')", orResult)
+		assert.Equal(t, testEventPushCondition+" && "+testEventReleaseCondition, andResult)
+		assert.Equal(t, "("+testEventPushCondition+" || "+testEventReleaseCondition+")", orResult)
 	})
 }
 
@@ -254,11 +285,11 @@ func TestRealWorldConditionExamples(t *testing.T) {
 			WithInputCondition("deploy.enabled").
 			WithCustomCondition(
 				NewConditionBuilder().
-					WithEventEquals("push").
-					WithRefStartsWith("refs/tags/").
+					WithEventEquals(testEventPush).
+					WithRefStartsWith(testRefTagsPrefix).
 					And(),
 			).
-			WithEventEquals("release").
+			WithEventEquals(testEventRelease).
 			Or()
 
 		result := NewConditionBuilder().
@@ -266,9 +297,9 @@ func TestRealWorldConditionExamples(t *testing.T) {
 			And()
 
 		assert.Contains(t, result, "{{ .Inputs.deploy.enabled }}")
-		assert.Contains(t, result, "github.event_name == 'push'")
-		assert.Contains(t, result, "startsWith(github.ref, 'refs/tags/')")
-		assert.Contains(t, result, "github.event_name == 'release'")
+		assert.Contains(t, result, testEventPushCondition)
+		assert.Contains(t, result, testRefTagsStartsWithCondition)
+		assert.Contains(t, result, testEventReleaseCondition)
 	})
 
 	t.Run("security scan with environment condition", func(t *testing.T) {

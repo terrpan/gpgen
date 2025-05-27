@@ -8,6 +8,20 @@ import (
 	"github.com/terrpan/gpgen/pkg/models"
 )
 
+// Test constants to avoid SonarQube duplicate literal warnings
+const (
+	// Template condition strings for integration tests
+	integrationContainerEnabledTemplate = "{{ .Inputs.container.enabled }}"
+	integrationContainerBuildAlwaysBuildTemplate = "{{ .Inputs.container.build.alwaysBuild }}"
+	integrationContainerBuildOnPRTemplate = "{{ .Inputs.container.build.onPR }}"
+	integrationContainerBuildOnProductionTemplate = "{{ .Inputs.container.build.onProduction }}"
+	integrationContainerPushEnabledTemplate = "{{ .Inputs.container.push.enabled }}"
+	integrationContainerPushAlwaysPushTemplate = "{{ .Inputs.container.push.alwaysPush }}"
+	integrationContainerPushOnProductionTemplate = "{{ .Inputs.container.push.onProduction }}"
+	integrationSecurityTrivyEnabledTemplate = "{{ .Inputs.security.trivy.enabled }}"
+	integrationSecurityTrivyEnabledWithAlwaysTemplate = "{{ .Inputs.security.trivy.enabled }} && always()"
+)
+
 // Test helper functions for modular testing
 
 // templateTestCase defines a test case for template validation
@@ -501,12 +515,12 @@ func TestConditionComplexity(t *testing.T) {
 		assert.NotContains(t, condition, "( )")
 
 		// Should contain expected logical structure
-		assert.Contains(t, condition, "{{ .Inputs.container.enabled }}")
+		assert.Contains(t, condition, integrationContainerEnabledTemplate)
 
 		// Should contain build triggers
-		assert.Contains(t, condition, "{{ .Inputs.container.build.alwaysBuild }}")
-		assert.Contains(t, condition, "{{ .Inputs.container.build.onPR }}")
-		assert.Contains(t, condition, "{{ .Inputs.container.build.onProduction }}")
+		assert.Contains(t, condition, integrationContainerBuildAlwaysBuildTemplate)
+		assert.Contains(t, condition, integrationContainerBuildOnPRTemplate)
+		assert.Contains(t, condition, integrationContainerBuildOnProductionTemplate)
 	})
 
 	t.Run("container push condition is well-formed", func(t *testing.T) {
@@ -518,12 +532,12 @@ func TestConditionComplexity(t *testing.T) {
 		assert.NotContains(t, condition, "( )")
 
 		// Should contain expected logical structure
-		assert.Contains(t, condition, "{{ .Inputs.container.enabled }}")
-		assert.Contains(t, condition, "{{ .Inputs.container.push.enabled }}")
+		assert.Contains(t, condition, integrationContainerEnabledTemplate)
+		assert.Contains(t, condition, integrationContainerPushEnabledTemplate)
 
 		// Should contain push triggers
-		assert.Contains(t, condition, "{{ .Inputs.container.push.alwaysPush }}")
-		assert.Contains(t, condition, "{{ .Inputs.container.push.onProduction }}")
+		assert.Contains(t, condition, integrationContainerPushAlwaysPushTemplate)
+		assert.Contains(t, condition, integrationContainerPushOnProductionTemplate)
 	})
 
 	t.Run("security conditions are simple and clear", func(t *testing.T) {
@@ -531,9 +545,9 @@ func TestConditionComplexity(t *testing.T) {
 		uploadCondition := SecurityCond.TrivyUploadCondition()
 
 		// Scan condition should be simple
-		assert.Equal(t, "{{ .Inputs.security.trivy.enabled }}", scanCondition)
+		assert.Equal(t, integrationSecurityTrivyEnabledTemplate, scanCondition)
 
 		// Upload condition should include always()
-		assert.Equal(t, "{{ .Inputs.security.trivy.enabled }} && always()", uploadCondition)
+		assert.Equal(t, integrationSecurityTrivyEnabledWithAlwaysTemplate, uploadCondition)
 	})
 }
