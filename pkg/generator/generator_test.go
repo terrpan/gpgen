@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/terrpan/gpgen/pkg/manifest"
+	"github.com/terrpan/gpgen/pkg/models"
 )
 
 func TestWorkflowGenerator_GenerateWorkflow(t *testing.T) {
@@ -588,183 +589,105 @@ func TestWorkflowGenerator_AddEventDrivenContext(t *testing.T) {
 	generator := NewWorkflowGenerator("")
 
 	t.Run("default environment context", func(t *testing.T) {
-		inputs := make(map[string]interface{})
+		inputs := &models.WorkflowInputs{}
 		generator.addEventDrivenContext(inputs, "default")
 
-		assert.Equal(t, true, inputs["containerBuildOnPR"], "Should set containerBuildOnPR to true for default environment")
-		assert.Equal(t, false, inputs["containerPushOnProduction"], "Should set containerPushOnProduction to false for default environment")
+		assert.True(t, inputs.Container.Build.OnPR, "Should set container build on PR to true for default environment")
+		assert.False(t, inputs.Container.Push.OnProduction, "Should set container push on production to false for default environment")
 	})
 
 	t.Run("staging environment context", func(t *testing.T) {
-		inputs := make(map[string]interface{})
+		inputs := &models.WorkflowInputs{}
 		generator.addEventDrivenContext(inputs, "staging")
 
-		assert.Equal(t, true, inputs["containerBuildOnPR"], "Should set containerBuildOnPR to true for staging environment")
-		assert.Equal(t, false, inputs["containerPushOnProduction"], "Should set containerPushOnProduction to false for staging environment")
+		assert.True(t, inputs.Container.Build.OnPR, "Should set container build on PR to true for staging environment")
+		assert.False(t, inputs.Container.Push.OnProduction, "Should set container push on production to false for staging environment")
 	})
 
 	t.Run("production environment context", func(t *testing.T) {
-		inputs := make(map[string]interface{})
+		inputs := &models.WorkflowInputs{}
 		generator.addEventDrivenContext(inputs, "production")
 
-		assert.Equal(t, false, inputs["containerBuildOnPR"], "Should set containerBuildOnPR to false for production environment")
-		assert.Equal(t, true, inputs["containerBuildOnProduction"], "Should set containerBuildOnProduction to true for production environment")
-		assert.Equal(t, true, inputs["containerPushOnProduction"], "Should set containerPushOnProduction to true for production environment")
+		assert.False(t, inputs.Container.Build.OnPR, "Should set container build on PR to false for production environment")
+		assert.True(t, inputs.Container.Build.OnProduction, "Should set container build on production to true for production environment")
+		assert.True(t, inputs.Container.Push.OnProduction, "Should set container push on production to true for production environment")
 	})
 
-	t.Run("preserves existing values", func(t *testing.T) {
-		inputs := map[string]interface{}{
-			"containerBuildOnPR": false,
+	t.Run("applies environment context correctly", func(t *testing.T) {
+		inputs := &models.WorkflowInputs{
+			Container: models.ContainerConfig{
+				Build: models.BuildConfig{
+					OnPR: false, // Start with false
+				},
+			},
 		}
 		generator.addEventDrivenContext(inputs, "default")
 
-		assert.Equal(t, false, inputs["containerBuildOnPR"], "Should preserve existing containerBuildOnPR value")
-		assert.Equal(t, false, inputs["containerPushOnProduction"], "Should still set new values")
+		assert.True(t, inputs.Container.Build.OnPR, "Should set OnPR to true for default environment")
+		assert.False(t, inputs.Container.Push.OnProduction, "Should keep OnProduction false for default environment")
 	})
 }
 
-func TestWorkflowGenerator_NormalizeLegacyInputs(t *testing.T) {
+func TestWorkflowGenerator_InputProcessing(t *testing.T) {
 	generator := NewWorkflowGenerator("")
 
-	t.Run("converts legacy security inputs to object structure", func(t *testing.T) {
-		inputs := map[string]interface{}{
-			"trivyScanEnabled": true,
-			"trivySeverity":    "CRITICAL",
-		}
-
-		generator.normalizeLegacyInputs(inputs)
-
-		// Check that security object is created
-		require.Contains(t, inputs, "security")
-		securityObj, ok := inputs["security"].(map[string]interface{})
-		require.True(t, ok, "security should be a map")
-
-		require.Contains(t, securityObj, "trivy")
-		trivyObj, ok := securityObj["trivy"].(map[string]interface{})
-		require.True(t, ok, "security.trivy should be a map")
-
-		assert.Equal(t, true, trivyObj["enabled"], "Should set security.trivy.enabled from trivyScanEnabled")
-		assert.Equal(t, "CRITICAL", trivyObj["severity"], "Should set security.trivy.severity from trivySeverity")
-		assert.Equal(t, "1", trivyObj["exitCode"], "Should set default exitCode")
-
-		// Check that legacy flat values are preserved for compatibility
-		assert.Equal(t, true, inputs["trivyScanEnabled"], "Should preserve legacy trivyScanEnabled")
-		assert.Equal(t, "CRITICAL", inputs["trivySeverity"], "Should preserve legacy trivySeverity")
-	})
-
-	t.Run("converts legacy container inputs to object structure", func(t *testing.T) {
-		inputs := map[string]interface{}{
-			"containerEnabled":      true,
-			"containerRegistry":     "gcr.io",
-			"containerImageName":    "my-app",
-			"containerImageTag":     "v1.0.0",
-			"containerDockerfile":   "custom.Dockerfile",
-			"containerBuildContext": "./app",
-			"containerBuildArgs":    `{"VERSION": "1.0"}`,
-			"containerPushEnabled":  false,
-		}
-
-		generator.normalizeLegacyInputs(inputs)
-
-		// Check that container object is created
-		require.Contains(t, inputs, "container")
-		containerObj, ok := inputs["container"].(map[string]interface{})
-		require.True(t, ok, "container should be a map")
-
-		assert.Equal(t, true, containerObj["enabled"], "Should set container.enabled")
-		assert.Equal(t, "gcr.io", containerObj["registry"], "Should set container.registry")
-		assert.Equal(t, "my-app", containerObj["imageName"], "Should set container.imageName")
-		assert.Equal(t, "v1.0.0", containerObj["imageTag"], "Should set container.imageTag")
-		assert.Equal(t, "custom.Dockerfile", containerObj["dockerfile"], "Should set container.dockerfile")
-		assert.Equal(t, "./app", containerObj["buildContext"], "Should set container.buildContext")
-		assert.Equal(t, `{"VERSION": "1.0"}`, containerObj["buildArgs"], "Should set container.buildArgs")
-
-		// Check nested objects
-		require.Contains(t, containerObj, "push")
-		pushObj, ok := containerObj["push"].(map[string]interface{})
-		require.True(t, ok, "container.push should be a map")
-		assert.Equal(t, false, pushObj["enabled"], "Should set container.push.enabled")
-
-		require.Contains(t, containerObj, "build")
-		buildObj, ok := containerObj["build"].(map[string]interface{})
-		require.True(t, ok, "container.build should be a map")
-		assert.Equal(t, true, buildObj["onPR"], "Should set default container.build.onPR")
-		assert.Equal(t, true, buildObj["onProduction"], "Should set default container.build.onProduction")
-
-		// Check that legacy flat values are preserved for compatibility
-		assert.Equal(t, true, inputs["containerEnabled"], "Should preserve legacy containerEnabled")
-		assert.Equal(t, "gcr.io", inputs["containerRegistry"], "Should preserve legacy containerRegistry")
-	})
-
-	t.Run("preserves existing object structure", func(t *testing.T) {
-		inputs := map[string]interface{}{
+	t.Run("processes typed inputs correctly", func(t *testing.T) {
+		rawInputs := map[string]interface{}{
+			"nodeVersion": "18",
 			"security": map[string]interface{}{
 				"trivy": map[string]interface{}{
-					"enabled":  false,
-					"severity": "MEDIUM",
-					"exitCode": "0",
+					"enabled":  true,
+					"severity": "CRITICAL",
 				},
 			},
 			"container": map[string]interface{}{
-				"enabled": false,
-				"push": map[string]interface{}{
-					"enabled": false,
-				},
+				"enabled":  true,
+				"registry": "ghcr.io",
 			},
 		}
 
-		generator.normalizeLegacyInputs(inputs)
+		processedInputs, err := generator.inputProcessor.ProcessInputs(rawInputs)
+		require.NoError(t, err)
 
-		// Check that existing object structure is preserved
-		securityObj := inputs["security"].(map[string]interface{})
-		trivyObj := securityObj["trivy"].(map[string]interface{})
-		assert.Equal(t, false, trivyObj["enabled"], "Should preserve existing security.trivy.enabled")
-		assert.Equal(t, "MEDIUM", trivyObj["severity"], "Should preserve existing security.trivy.severity")
-		assert.Equal(t, "0", trivyObj["exitCode"], "Should preserve existing security.trivy.exitCode")
-
-		containerObj := inputs["container"].(map[string]interface{})
-		assert.Equal(t, false, containerObj["enabled"], "Should preserve existing container.enabled")
-
-		// Check that legacy values are set from object for compatibility
-		assert.Equal(t, false, inputs["trivyScanEnabled"], "Should set legacy value from object")
-		assert.Equal(t, "MEDIUM", inputs["trivySeverity"], "Should set legacy value from object")
-		assert.Equal(t, false, inputs["containerEnabled"], "Should set legacy value from object")
+		assert.Equal(t, "18", processedInputs.NodeVersion)
+		assert.True(t, processedInputs.Security.Trivy.Enabled)
+		assert.Equal(t, "CRITICAL", processedInputs.Security.Trivy.Severity)
+		assert.True(t, processedInputs.Container.Enabled)
+		assert.Equal(t, "ghcr.io", processedInputs.Container.Registry)
 	})
 
-	t.Run("handles missing object properties with defaults", func(t *testing.T) {
-		inputs := map[string]interface{}{
-			"trivyScanEnabled": true,
-			"containerEnabled": true,
+	t.Run("handles legacy inputs", func(t *testing.T) {
+		rawInputs := map[string]interface{}{
+			"trivyScanEnabled":  true,
+			"trivySeverity":     "HIGH",
+			"containerEnabled":  true,
+			"containerRegistry": "gcr.io",
 		}
 
-		generator.normalizeLegacyInputs(inputs)
+		processedInputs, err := generator.inputProcessor.ProcessInputs(rawInputs)
+		require.NoError(t, err)
 
-		// Check security defaults
-		securityObj := inputs["security"].(map[string]interface{})
-		trivyObj := securityObj["trivy"].(map[string]interface{})
-		assert.Equal(t, true, trivyObj["enabled"], "Should use trivyScanEnabled value")
-		assert.Equal(t, "CRITICAL,HIGH", trivyObj["severity"], "Should use default severity")
-		assert.Equal(t, "1", trivyObj["exitCode"], "Should use default exitCode")
+		// Check that legacy inputs are normalized into typed structures
+		assert.True(t, processedInputs.Security.Trivy.Enabled)
+		assert.Equal(t, "HIGH", processedInputs.Security.Trivy.Severity)
+		assert.True(t, processedInputs.Container.Enabled)
+		assert.Equal(t, "gcr.io", processedInputs.Container.Registry)
+	})
 
-		// Check container defaults
-		containerObj := inputs["container"].(map[string]interface{})
-		assert.Equal(t, true, containerObj["enabled"], "Should use containerEnabled value")
-		assert.Equal(t, "ghcr.io", containerObj["registry"], "Should use default registry")
-		assert.Equal(t, "${{ github.repository }}", containerObj["imageName"], "Should use default imageName")
-		assert.Equal(t, "${{ github.sha }}", containerObj["imageTag"], "Should use default imageTag")
-		assert.Equal(t, "Dockerfile", containerObj["dockerfile"], "Should use default dockerfile")
-		assert.Equal(t, ".", containerObj["buildContext"], "Should use default buildContext")
-		assert.Equal(t, "{}", containerObj["buildArgs"], "Should use default buildArgs")
+	t.Run("applies defaults for missing values", func(t *testing.T) {
+		rawInputs := map[string]interface{}{
+			"nodeVersion": "20",
+		}
 
-		pushObj := containerObj["push"].(map[string]interface{})
-		assert.Equal(t, true, pushObj["enabled"], "Should use default push.enabled")
-		assert.Equal(t, true, pushObj["onProduction"], "Should use default push.onProduction")
+		processedInputs, err := generator.inputProcessor.ProcessInputs(rawInputs)
+		require.NoError(t, err)
 
-		buildObj := containerObj["build"].(map[string]interface{})
-		assert.Equal(t, false, buildObj["alwaysBuild"], "Should use default build.alwaysBuild")
-		assert.Equal(t, false, buildObj["alwaysPush"], "Should use default build.alwaysPush")
-		assert.Equal(t, true, buildObj["onPR"], "Should use default build.onPR")
-		assert.Equal(t, true, buildObj["onProduction"], "Should use default build.onProduction")
+		assert.Equal(t, "20", processedInputs.NodeVersion)
+		// Check that defaults are applied
+		assert.Equal(t, "CRITICAL,HIGH", processedInputs.Security.Trivy.Severity)
+		assert.Equal(t, "1", processedInputs.Security.Trivy.ExitCode)
+		assert.Equal(t, "ghcr.io", processedInputs.Container.Registry)
+		assert.Equal(t, "${{ github.repository }}", processedInputs.Container.ImageName)
 	})
 }
 
@@ -817,9 +740,11 @@ func TestWorkflowGenerator_GetEffectiveInputsWithTemplateDefaults(t *testing.T) 
 		// Check that environment overrides are applied
 		assert.Equal(t, "CRITICAL", inputs["trivySeverity"], "Should use environment override for trivySeverity")
 
-		// Check that event-driven context is added
-		assert.Contains(t, inputs, "containerBuildOnPR", "Should add event-driven context")
-		assert.Contains(t, inputs, "containerBuildOnProduction", "Should add event-driven context")
+		// Check that event-driven context is applied to container build settings
+		containerObj := inputs["container"].(map[string]interface{})
+		buildObj := containerObj["build"].(map[string]interface{})
+		assert.Equal(t, false, buildObj["onPR"], "Should set onPR based on production environment")
+		assert.Equal(t, true, buildObj["onProduction"], "Should set onProduction based on production environment")
 
 		// Check that normalization is applied
 		assert.Contains(t, inputs, "security", "Should create security object")
@@ -840,7 +765,12 @@ func TestWorkflowGenerator_GetEffectiveInputsWithTemplateDefaults(t *testing.T) 
 
 		// Should still work without template defaults
 		assert.Equal(t, "value", inputs["customInput"], "Should preserve user inputs")
-		assert.Contains(t, inputs, "containerBuildOnPR", "Should still add event-driven context")
+
+		// Check that event-driven context is still applied to container build settings
+		containerObj := inputs["container"].(map[string]interface{})
+		buildObj := containerObj["build"].(map[string]interface{})
+		assert.Equal(t, true, buildObj["onPR"], "Should set onPR for default environment")
+		assert.Equal(t, true, buildObj["onProduction"], "Should set onProduction for default environment")
 	})
 }
 

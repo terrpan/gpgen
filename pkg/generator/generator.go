@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	"github.com/terrpan/gpgen/pkg/manifest"
+	"github.com/terrpan/gpgen/pkg/models"
 	"github.com/terrpan/gpgen/pkg/templates"
 	"gopkg.in/yaml.v3"
 )
@@ -14,12 +15,14 @@ import (
 // WorkflowGenerator generates GitHub Actions workflows from manifests and templates
 type WorkflowGenerator struct {
 	templateManager *templates.TemplateManager
+	inputProcessor  *models.InputProcessor
 }
 
 // NewWorkflowGenerator creates a new workflow generator
 func NewWorkflowGenerator(templatesDir string) *WorkflowGenerator {
 	return &WorkflowGenerator{
 		templateManager: templates.NewTemplateManager(templatesDir),
+		inputProcessor:  models.NewInputProcessor(),
 	}
 }
 
@@ -97,66 +100,79 @@ func (g *WorkflowGenerator) GenerateWorkflow(m *manifest.Manifest, environment s
 
 // getEffectiveInputs merges template defaults, base inputs, environment-specific overrides and event context
 func (g *WorkflowGenerator) getEffectiveInputs(m *manifest.Manifest, environment string) map[string]interface{} {
-	inputs := make(map[string]interface{})
+	rawInputs := make(map[string]interface{})
 
 	// Load template to get defaults
 	tmpl, err := g.templateManager.LoadTemplate(m.Spec.Template)
-	if err != nil {
-		// If we can't load the template, proceed without defaults
-		// This shouldn't happen as template loading is validated earlier
-	} else {
+	if err == nil {
 		// Start with template defaults
 		for k, inputDef := range tmpl.Inputs {
 			if inputDef.Default != nil {
-				inputs[k] = inputDef.Default
+				rawInputs[k] = inputDef.Default
 			}
 		}
 	}
 
 	// Apply base inputs (overrides template defaults)
 	for k, v := range m.Spec.Inputs {
-		inputs[k] = v
+		rawInputs[k] = v
 	}
 
 	// Apply environment-specific overrides
 	if environment != "default" {
 		if envConfig, exists := m.Spec.Environments[environment]; exists {
 			for k, v := range envConfig.Inputs {
-				inputs[k] = v
+				rawInputs[k] = v
 			}
 		}
 	}
 
-	// Add event-driven context based on environment triggers
-	g.addEventDrivenContext(inputs, environment)
+	// Process inputs through the type-safe processor
+	processedInputs, err := g.inputProcessor.ProcessInputs(rawInputs)
+	if err != nil {
+		// Fall back to raw inputs if processing fails
+		return rawInputs
+	}
 
-	return inputs
+	// Add event-driven context
+	g.addEventDrivenContext(processedInputs, environment)
+
+	// Convert back to map for template processing
+	return g.inputProcessor.ToMap(processedInputs)
 }
 
 // addEventDrivenContext adds context-aware settings based on environment and triggers
-func (g *WorkflowGenerator) addEventDrivenContext(inputs map[string]interface{}, environment string) {
+func (g *WorkflowGenerator) addEventDrivenContext(inputs *models.WorkflowInputs, environment string) {
 	// Set default event-driven behavior based on environment
 	switch environment {
 	case "default", "staging":
 		// Default/staging: Build on PRs for validation, but strategic pushing
-		if _, exists := inputs["containerBuildOnPR"]; !exists {
-			inputs["containerBuildOnPR"] = true
+		if !inputs.Container.Build.OnPR {
+			inputs.Container.Build.OnPR = true
 		}
-		if _, exists := inputs["containerPushOnProduction"]; !exists {
-			inputs["containerPushOnProduction"] = false // Don't push on production events in staging
+		if inputs.Container.Push.OnProduction {
+			inputs.Container.Push.OnProduction = false // Don't push on production events in staging
 		}
 	case "production":
 		// Production: Build and push on production events
-		if _, exists := inputs["containerBuildOnPR"]; !exists {
-			inputs["containerBuildOnPR"] = false // Don't build on PRs in production env
+		if inputs.Container.Build.OnPR {
+			inputs.Container.Build.OnPR = false // Don't build on PRs in production env
 		}
-		if _, exists := inputs["containerBuildOnProduction"]; !exists {
-			inputs["containerBuildOnProduction"] = true
+		if !inputs.Container.Build.OnProduction {
+			inputs.Container.Build.OnProduction = true
 		}
-		if _, exists := inputs["containerPushOnProduction"]; !exists {
-			inputs["containerPushOnProduction"] = true
+		if !inputs.Container.Push.OnProduction {
+			inputs.Container.Push.OnProduction = true
 		}
 	}
+}
+
+// getValue returns obj[key] if present (even if nil), otherwise defaultValue
+func getValue(obj map[string]interface{}, key string, defaultValue interface{}) interface{} {
+	if val, exists := obj[key]; exists {
+		return val
+	}
+	return defaultValue
 }
 
 // generateSteps generates workflow steps by merging template steps with custom steps
@@ -454,19 +470,47 @@ func (g *WorkflowGenerator) getWorkflowTriggers(m *manifest.Manifest, environmen
 func (g *WorkflowGenerator) getRequiredPermissions(tmpl *templates.Template, inputs map[string]interface{}) map[string]string {
 	permissions := make(map[string]string)
 
+	// Process inputs to get typed access
+	processedInputs, err := g.inputProcessor.ProcessInputs(inputs)
+	if err != nil {
+		// Fallback to legacy permission checking if processing fails
+		return g.getLegacyPermissions(inputs)
+	}
+
 	// Check if Trivy scanning is enabled
+	if processedInputs.Security.Trivy.Enabled {
+		// Add permissions required for uploading SARIF results to GitHub Security tab
+		permissions["security-events"] = "write"
+		permissions["contents"] = "read"
+	}
+
+	// Check if container building/pushing is enabled
+	if processedInputs.Container.Enabled {
+		// Add permissions required for container registry operations
+		permissions["packages"] = "write"
+		if permissions["contents"] == "" {
+			permissions["contents"] = "read"
+		}
+	}
+
+	return permissions
+}
+
+// getLegacyPermissions provides fallback permission checking for legacy inputs
+func (g *WorkflowGenerator) getLegacyPermissions(inputs map[string]interface{}) map[string]string {
+	permissions := make(map[string]string)
+
+	// Check if Trivy scanning is enabled (legacy way)
 	if trivyScanEnabled, exists := inputs["trivyScanEnabled"]; exists {
 		if enabled, ok := trivyScanEnabled.(bool); ok && enabled {
-			// Add permissions required for uploading SARIF results to GitHub Security tab
 			permissions["security-events"] = "write"
 			permissions["contents"] = "read"
 		}
 	}
 
-	// Check if container building/pushing is enabled
+	// Check if container building/pushing is enabled (legacy way)
 	if containerEnabled, exists := inputs["containerEnabled"]; exists {
 		if enabled, ok := containerEnabled.(bool); ok && enabled {
-			// Add permissions required for container registry operations
 			permissions["packages"] = "write"
 			if permissions["contents"] == "" {
 				permissions["contents"] = "read"

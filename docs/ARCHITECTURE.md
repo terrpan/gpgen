@@ -183,6 +183,60 @@ func (wg *WorkflowGenerator) ApplyCustomStep(steps []Step, customStep CustomStep
 - Maintains workflow integrity
 - Handles edge cases and validation
 
+### `pkg/models/` - Shared Type Definitions and Input Processing
+
+**Purpose**: Centralized location for shared types, preventing import cycles and providing type-safe input processing.
+
+**Key Responsibilities**:
+1. **Shared Types**: Template, Input, Step, and workflow configuration structures
+2. **Type Safety**: Strongly typed alternatives to `map[string]interface{}`
+3. **Input Processing**: Conversion and normalization of workflow inputs
+4. **Default Values**: Centralized default configurations for security, containers, etc.
+
+**Core Types**:
+```go
+// Shared template structures
+type Template struct {
+    Name        string           `yaml:"name"`
+    Description string           `yaml:"description"`
+    Inputs      map[string]Input `yaml:"inputs"`
+    Steps       []Step           `yaml:"steps"`
+}
+
+// Strongly typed input configurations
+type WorkflowInputs struct {
+    NodeVersion    string          `json:"nodeVersion,omitempty"`
+    Security       SecurityConfig  `json:"security,omitempty"`
+    Container      ContainerConfig `json:"container,omitempty"`
+    // ... other typed fields
+}
+
+type SecurityConfig struct {
+    Trivy TrivyConfig `yaml:"trivy" json:"trivy"`
+}
+
+type ContainerConfig struct {
+    Enabled   bool        `yaml:"enabled" json:"enabled"`
+    Registry  string      `yaml:"registry" json:"registry"`
+    Push      PushConfig  `yaml:"push" json:"push"`
+    Build     BuildConfig `yaml:"build" json:"build"`
+    // ... other container fields
+}
+```
+
+**InputProcessor Features**:
+- **Type-Safe Conversion**: Converts `map[string]interface{}` to strongly typed structures
+- **Legacy Support**: Handles backward compatibility with old input formats
+- **Normalization**: Applies defaults and handles missing values
+- **Validation**: Ensures input integrity and consistency
+
+**Benefits**:
+- **Import Cycle Prevention**: Shared types break circular dependencies
+- **Type Safety**: Compile-time checking prevents runtime errors
+- **Code Clarity**: Explicit types make code self-documenting
+- **Maintainability**: Centralized type definitions simplify changes
+- **Performance**: Reduced runtime type assertions
+
 ## Design Patterns & Principles
 
 ### 1. **DRY (Don't Repeat Yourself)**

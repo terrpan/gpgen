@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/terrpan/gpgen/pkg/models"
 )
 
 // Test helper functions for modular testing
@@ -42,7 +43,7 @@ func testLanguageVersionInput(t *testing.T, template *Template, versionKey strin
 	versionInput, exists := template.Inputs[versionKey]
 	require.True(t, exists, "Template should have %s input", versionKey)
 	assert.True(t, versionInput.Required, "%s should be required", versionKey)
-	assert.Equal(t, "string", versionInput.Type, "%s should be string type", versionKey)
+	assert.Equal(t, models.InputTypeString, versionInput.Type, "%s should be string type", versionKey)
 
 	for _, version := range expectedVersions {
 		assert.Contains(t, versionInput.Options, version, "Should support %s version %s", versionKey, version)
@@ -71,12 +72,12 @@ func testCommonInputs(t *testing.T, template *Template) {
 	// Check security inputs
 	securityInput, exists := template.Inputs["security"]
 	assert.True(t, exists, "Template should have security input")
-	assert.Equal(t, "object", securityInput.Type)
+	assert.Equal(t, models.InputTypeObject, securityInput.Type)
 
 	// Check container inputs
 	containerInput, exists := template.Inputs["container"]
 	assert.True(t, exists, "Template should have container input")
-	assert.Equal(t, "object", containerInput.Type)
+	assert.Equal(t, models.InputTypeObject, containerInput.Type)
 }
 
 // testCommonSteps validates that all templates have security and container steps
@@ -212,7 +213,7 @@ func TestNodeAppTemplate(t *testing.T) {
 	// Test package manager input
 	packageManagerInput, exists := template.Inputs["packageManager"]
 	require.True(t, exists)
-	assert.Equal(t, "string", packageManagerInput.Type)
+	assert.Equal(t, models.InputTypeString, packageManagerInput.Type)
 	assert.Contains(t, packageManagerInput.Options, "npm")
 	assert.Contains(t, packageManagerInput.Options, "yarn")
 	assert.Contains(t, packageManagerInput.Options, "pnpm")
@@ -238,12 +239,12 @@ func TestGoServiceTemplate(t *testing.T) {
 	// Test Go-specific inputs
 	testCommandInput, exists := template.Inputs["testCommand"]
 	require.True(t, exists)
-	assert.Equal(t, "string", testCommandInput.Type)
+	assert.Equal(t, models.InputTypeString, testCommandInput.Type)
 	assert.True(t, testCommandInput.Required)
 
 	buildCommandInput, exists := template.Inputs["buildCommand"]
 	require.True(t, exists)
-	assert.Equal(t, "string", buildCommandInput.Type)
+	assert.Equal(t, models.InputTypeString, buildCommandInput.Type)
 	assert.True(t, buildCommandInput.Required)
 
 	// Test common inputs and steps
@@ -267,7 +268,7 @@ func TestPythonAppTemplate(t *testing.T) {
 	// Test Python-specific inputs
 	requirementsInput, exists := template.Inputs["requirements"]
 	require.True(t, exists)
-	assert.Equal(t, "string", requirementsInput.Type)
+	assert.Equal(t, models.InputTypeString, requirementsInput.Type)
 
 	// Test common inputs and steps
 	testCommonInputs(t, template)
@@ -285,6 +286,8 @@ func TestTemplateManager_ListTemplates(t *testing.T) {
 }
 
 func TestValidateInputValue(t *testing.T) {
+	tm := NewTemplateManager("")
+
 	tests := []struct {
 		name        string
 		inputName   string
@@ -296,84 +299,84 @@ func TestValidateInputValue(t *testing.T) {
 			name:      "valid string",
 			inputName: "test",
 			value:     "hello",
-			inputDef:  Input{Type: "string"},
+			inputDef:  Input{Type: models.InputTypeString},
 		},
 		{
 			name:        "invalid string type",
 			inputName:   "test",
 			value:       123,
-			inputDef:    Input{Type: "string"},
+			inputDef:    Input{Type: models.InputTypeString},
 			expectError: true,
 		},
 		{
 			name:      "valid number int",
 			inputName: "test",
 			value:     123,
-			inputDef:  Input{Type: "number"},
+			inputDef:  Input{Type: models.InputTypeNumber},
 		},
 		{
 			name:      "valid number float",
 			inputName: "test",
 			value:     123.45,
-			inputDef:  Input{Type: "number"},
+			inputDef:  Input{Type: models.InputTypeNumber},
 		},
 		{
 			name:        "invalid number type",
 			inputName:   "test",
 			value:       "not-a-number",
-			inputDef:    Input{Type: "number"},
+			inputDef:    Input{Type: models.InputTypeNumber},
 			expectError: true,
 		},
 		{
 			name:      "valid boolean true",
 			inputName: "test",
 			value:     true,
-			inputDef:  Input{Type: "boolean"},
+			inputDef:  Input{Type: models.InputTypeBoolean},
 		},
 		{
 			name:      "valid boolean false",
 			inputName: "test",
 			value:     false,
-			inputDef:  Input{Type: "boolean"},
+			inputDef:  Input{Type: models.InputTypeBoolean},
 		},
 		{
 			name:        "invalid boolean type",
 			inputName:   "test",
 			value:       "true",
-			inputDef:    Input{Type: "boolean"},
+			inputDef:    Input{Type: models.InputTypeBoolean},
 			expectError: true,
 		},
 		{
 			name:      "valid array",
 			inputName: "test",
 			value:     []interface{}{"a", "b", "c"},
-			inputDef:  Input{Type: "array"},
+			inputDef:  Input{Type: models.InputTypeArray},
 		},
 		{
 			name:        "invalid array type",
 			inputName:   "test",
 			value:       "not-an-array",
-			inputDef:    Input{Type: "array"},
+			inputDef:    Input{Type: models.InputTypeArray},
 			expectError: true,
 		},
 		{
 			name:      "valid option",
 			inputName: "test",
 			value:     "option1",
-			inputDef:  Input{Type: "string", Options: []string{"option1", "option2"}},
+			inputDef:  Input{Type: models.InputTypeString, Options: []string{"option1", "option2"}},
 		},
 		{
 			name:        "invalid option",
 			inputName:   "test",
 			value:       "option3",
-			inputDef:    Input{Type: "string", Options: []string{"option1", "option2"}},
+			inputDef:    Input{Type: models.InputTypeString, Options: []string{"option1", "option2"}},
 			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateInputValue(tt.inputName, tt.value, tt.inputDef)
+			err := tm.ValidateInputValue(tt.inputName, tt.value, tt.inputDef)
 
 			if tt.expectError {
 				assert.Error(t, err)
