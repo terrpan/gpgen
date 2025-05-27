@@ -33,7 +33,7 @@ func testTemplateStructure(t *testing.T, tc templateTestCase) {
 	// Verify checkout step (should be first)
 	checkoutStep := tc.template.Steps[0]
 	assert.Equal(t, "checkout", checkoutStep.ID)
-	assert.Equal(t, "actions/checkout@v4", checkoutStep.Uses)
+	assert.Equal(t, GitHubActionVersions.Checkout, checkoutStep.Uses)
 }
 
 // testLanguageVersionInput validates language version input configuration
@@ -208,7 +208,7 @@ func TestNodeAppTemplate(t *testing.T) {
 
 	// Test Node.js-specific configuration
 	testLanguageVersionInput(t, template, "nodeVersion", []string{"16", "18", "20", "22"})
-	testLanguageSetupStep(t, template, "setup-node", "actions/setup-node@v4")
+	testLanguageSetupStep(t, template, "setup-node", GitHubActionVersions.SetupNode)
 
 	// Test package manager input
 	packageManagerInput, exists := template.Inputs["packageManager"]
@@ -234,7 +234,7 @@ func TestGoServiceTemplate(t *testing.T) {
 
 	// Test Go-specific configuration
 	testLanguageVersionInput(t, template, "goVersion", []string{"1.21", "1.22", "1.23", "1.24"})
-	testLanguageSetupStep(t, template, "setup-go", "actions/setup-go@v4")
+	testLanguageSetupStep(t, template, "setup-go", GitHubActionVersions.SetupGo)
 
 	// Test Go-specific inputs
 	testCommandInput, exists := template.Inputs["testCommand"]
@@ -263,7 +263,7 @@ func TestPythonAppTemplate(t *testing.T) {
 
 	// Test Python-specific configuration
 	testLanguageVersionInput(t, template, "pythonVersion", []string{"3.9", "3.10", "3.11", "3.12"})
-	testLanguageSetupStep(t, template, "setup-python", "actions/setup-python@v4")
+	testLanguageSetupStep(t, template, "setup-python", GitHubActionVersions.SetupPython)
 
 	// Test Python-specific inputs
 	requirementsInput, exists := template.Inputs["requirements"]
@@ -385,4 +385,155 @@ func TestValidateInputValue(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestConditionIntegration validates that templates use the new condition builders
+func TestConditionIntegration(t *testing.T) {
+	t.Run("security steps use condition builders", func(t *testing.T) {
+		steps := createSecuritySteps()
+		require.Len(t, steps, 2)
+
+		// Verify security scan step uses SecurityCond.TrivyScanCondition()
+		securityStep := steps[0]
+		assert.Equal(t, "security-scan", securityStep.ID)
+		assert.Equal(t, GitHubActionVersions.TrivyAction, securityStep.Uses)
+		assert.Equal(t, SecurityCond.TrivyScanCondition(), securityStep.If)
+
+		// Verify upload step uses SecurityCond.TrivyUploadCondition()
+		uploadStep := steps[1]
+		assert.Equal(t, "upload-sarif", uploadStep.ID)
+		assert.Equal(t, GitHubActionVersions.CodeQLUploadSARIF, uploadStep.Uses)
+		assert.Equal(t, SecurityCond.TrivyUploadCondition(), uploadStep.If)
+	})
+
+	t.Run("container steps use condition builders", func(t *testing.T) {
+		steps := createContainerSteps()
+		require.Len(t, steps, 3)
+
+		// Verify setup buildx step uses ContainerCond.BuildCondition()
+		buildxStep := steps[0]
+		assert.Equal(t, "setup-docker-buildx", buildxStep.ID)
+		assert.Equal(t, GitHubActionVersions.DockerSetupBuildx, buildxStep.Uses)
+		assert.Equal(t, ContainerCond.BuildCondition(), buildxStep.If)
+
+		// Verify login step uses ContainerCond.PushCondition()
+		loginStep := steps[1]
+		assert.Equal(t, "login-registry", loginStep.ID)
+		assert.Equal(t, GitHubActionVersions.DockerLogin, loginStep.Uses)
+		assert.Equal(t, ContainerCond.PushCondition(), loginStep.If)
+
+		// Verify build-push step uses ContainerCond.BuildCondition()
+		buildPushStep := steps[2]
+		assert.Equal(t, "build-and-push", buildPushStep.ID)
+		assert.Equal(t, GitHubActionVersions.DockerBuildPush, buildPushStep.Uses)
+		assert.Equal(t, ContainerCond.BuildCondition(), buildPushStep.If)
+	})
+
+	t.Run("container steps use placeholder constants", func(t *testing.T) {
+		steps := createContainerSteps()
+		loginStep := steps[1] // login-registry step
+
+		assert.Equal(t, GitHubPlaceholders.ActorPlaceholder, loginStep.With["username"])
+		assert.Equal(t, GitHubPlaceholders.TokenPlaceholder, loginStep.With["password"])
+	})
+}
+
+// TestVersionConstants validates that all action versions are centralized
+func TestVersionConstants(t *testing.T) {
+	t.Run("checkout step uses version constant", func(t *testing.T) {
+		step := createCheckoutStep()
+		assert.Equal(t, GitHubActionVersions.Checkout, step.Uses)
+	})
+
+	t.Run("all templates use version constants", func(t *testing.T) {
+		templates := []struct {
+			name     string
+			template *Template
+		}{
+			{"node-app", getNodeAppTemplate()},
+			{"go-service", getGoServiceTemplate()},
+			{"python-app", getPythonAppTemplate()},
+		}
+
+		for _, tt := range templates {
+			t.Run(tt.name, func(t *testing.T) {
+				// Check that steps use proper version constants by validating against known good constants
+				for _, step := range tt.template.Steps {
+					if step.Uses != "" {
+						// Verify step uses one of our centralized version constants
+						isValidConstant := false
+						constantValues := []string{
+							GitHubActionVersions.Checkout,
+							GitHubActionVersions.SetupNode,
+							GitHubActionVersions.SetupGo,
+							GitHubActionVersions.SetupPython,
+							GitHubActionVersions.DockerSetupBuildx,
+							GitHubActionVersions.DockerLogin,
+							GitHubActionVersions.DockerBuildPush,
+							GitHubActionVersions.CodeQLUploadSARIF,
+							GitHubActionVersions.TrivyAction,
+						}
+
+						for _, constant := range constantValues {
+							if step.Uses == constant {
+								isValidConstant = true
+								break
+							}
+						}
+
+						assert.True(t, isValidConstant,
+							"Step %s uses '%s' which should be one of our centralized version constants", step.ID, step.Uses)
+					}
+				}
+			})
+		}
+	})
+}
+
+// TestConditionComplexity validates that conditions are properly structured
+func TestConditionComplexity(t *testing.T) {
+	t.Run("container build condition is well-formed", func(t *testing.T) {
+		condition := ContainerCond.BuildCondition()
+
+		// Should not have syntax errors
+		assert.NotContains(t, condition, "&&  &&")
+		assert.NotContains(t, condition, "||  ||")
+		assert.NotContains(t, condition, "( )")
+
+		// Should contain expected logical structure
+		assert.Contains(t, condition, "{{ .Inputs.container.enabled }}")
+
+		// Should contain build triggers
+		assert.Contains(t, condition, "{{ .Inputs.container.build.alwaysBuild }}")
+		assert.Contains(t, condition, "{{ .Inputs.container.build.onPR }}")
+		assert.Contains(t, condition, "{{ .Inputs.container.build.onProduction }}")
+	})
+
+	t.Run("container push condition is well-formed", func(t *testing.T) {
+		condition := ContainerCond.PushCondition()
+
+		// Should not have syntax errors
+		assert.NotContains(t, condition, "&&  &&")
+		assert.NotContains(t, condition, "||  ||")
+		assert.NotContains(t, condition, "( )")
+
+		// Should contain expected logical structure
+		assert.Contains(t, condition, "{{ .Inputs.container.enabled }}")
+		assert.Contains(t, condition, "{{ .Inputs.container.push.enabled }}")
+
+		// Should contain push triggers
+		assert.Contains(t, condition, "{{ .Inputs.container.push.alwaysPush }}")
+		assert.Contains(t, condition, "{{ .Inputs.container.push.onProduction }}")
+	})
+
+	t.Run("security conditions are simple and clear", func(t *testing.T) {
+		scanCondition := SecurityCond.TrivyScanCondition()
+		uploadCondition := SecurityCond.TrivyUploadCondition()
+
+		// Scan condition should be simple
+		assert.Equal(t, "{{ .Inputs.security.trivy.enabled }}", scanCondition)
+
+		// Upload condition should include always()
+		assert.Equal(t, "{{ .Inputs.security.trivy.enabled }} && always()", uploadCondition)
+	})
 }

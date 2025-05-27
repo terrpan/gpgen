@@ -112,8 +112,11 @@ type ManifestSpec struct {
 
 **Purpose**: Define golden path templates with reusable components and helper functions.
 
-**Architecture**: Post-DRY refactoring, templates use a **helper function pattern** for maximum code reuse:
+**Architecture**: Post-modularization, templates use a **layered modular architecture** combining helper functions with centralized constants and condition builders:
 
+#### Core Modules
+
+**1. `templates.go` - Template Definitions**
 ```go
 // Helper Functions (Reusable)
 func createLanguageVersionInput(language string) map[string]Input
@@ -128,11 +131,65 @@ func getPythonAppTemplate() *Template
 func getGoServiceTemplate() *Template
 ```
 
-**Benefits of Helper Pattern**:
+**2. `conditions.go` - Centralized Constants and Condition Builders**
+```go
+// Type-Safe Action Version Constants
+var GitHubActionVersions = ActionVersions{
+    Checkout:            "actions/checkout@v4",
+    SetupNode:           "actions/setup-node@v4",
+    DockerSetupBuildx:   "docker/setup-buildx-action@v3",
+    TrivyAction:         "aquasecurity/trivy-action@master",
+    // ... all other action versions
+}
+
+// Centralized Placeholder Constants
+var GitHubPlaceholders = Placeholders{
+    ActorPlaceholder:    "GITHUB_ACTOR_PLACEHOLDER",
+    TokenPlaceholder:    "GITHUB_TOKEN_PLACEHOLDER",
+}
+
+// Condition Builder for Complex Logic
+type ConditionBuilder struct {
+    conditions []string
+}
+
+// Pre-built Condition Sets
+var ContainerCond = ContainerConditions{}
+var SecurityCond = SecurityConditions{}
+```
+
+#### Modular Benefits
+
+**From Helper Pattern (Phase 1)**:
 - **60% Code Reduction**: Eliminated duplication across templates
 - **Consistency**: All templates use identical input definitions
 - **Maintainability**: Single location to update common functionality
 - **Extensibility**: Easy to add new templates with consistent patterns
+
+**From Modularization (Phase 2)**:
+- **Type Safety**: Centralized constants prevent typos and version drift
+- **Maintainable Conditions**: Complex conditional logic extracted into reusable builders
+- **Single Source of Truth**: All action versions and placeholders centralized
+- **Simplified Testing**: Modular components are easier to unit test
+- **Reduced Cognitive Load**: Complex conditions replaced with descriptive method calls
+
+#### Architecture Layers
+
+```
+┌─────────────────────────────────────────────┐
+│           Template Definitions               │ ← Business Logic
+│         (getNodeAppTemplate, etc.)          │
+├─────────────────────────────────────────────┤
+│            Helper Functions                  │ ← Reusable Components
+│    (createSecurityInputs, mergeInputs)     │
+├─────────────────────────────────────────────┤
+│         Condition Builders                   │ ← Logic Abstraction
+│  (ContainerCond, SecurityCond, Builder)    │
+├─────────────────────────────────────────────┤
+│        Centralized Constants                │ ← Configuration
+│   (GitHubActionVersions, Placeholders)     │
+└─────────────────────────────────────────────┘
+```
 
 **Template Structure**:
 ```go
@@ -144,6 +201,26 @@ type Template struct {
     Tags        []string          `yaml:"tags"`
     Inputs      map[string]Input  `yaml:"inputs"`
     Steps       []Step            `yaml:"steps"`
+}
+```
+
+#### Example: Before vs After Modularization
+
+**Before** (Hardcoded, Repetitive):
+```go
+{
+    Name: "Checkout code",
+    Uses: "actions/checkout@v4",  // Hardcoded version
+    If:   "{{ .Inputs.container.enabled }} && ({{ .Inputs.container.build.alwaysBuild }} || ({{ .Inputs.container.build.onPR }} && github.event_name == 'pull_request') || ({{ .Inputs.container.build.onProduction }} && (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || github.event_name == 'release')))",  // Complex hardcoded condition
+}
+```
+
+**After** (Modular, Type-Safe):
+```go
+{
+    Name: "Checkout code",
+    Uses: GitHubActionVersions.Checkout,  // Centralized constant
+    If:   ContainerCond.BuildCondition(), // Descriptive condition builder
 }
 ```
 
@@ -286,6 +363,28 @@ func testTemplateStructure(t *testing.T, template *Template)
 func testLanguageVersionInput(t *testing.T, template *Template, language string)
 func testCommonInputs(t *testing.T, template *Template)
 func testCommonSteps(t *testing.T, template *Template)
+```
+
+### Template Modularization Testing
+The modular template architecture includes comprehensive testing for:
+
+1. **Constant Validation**: Ensures all action versions and placeholders are properly defined
+2. **Condition Builder Testing**: Validates complex conditional logic construction
+3. **Integration Testing**: Verifies templates use centralized constants instead of hardcoded values
+4. **Regression Testing**: Prevents reintroduction of hardcoded values
+
+**Test Structure**:
+```go
+// conditions_test.go - Unit tests for modular components
+func TestGitHubActionVersions(t *testing.T)      // Action version constants
+func TestGitHubPlaceholders(t *testing.T)        // Placeholder constants  
+func TestConditionBuilder(t *testing.T)          // Condition building logic
+func TestContainerConditions(t *testing.T)       // Container-specific conditions
+func TestSecurityConditions(t *testing.T)        // Security-specific conditions
+
+// templates_test.go - Integration tests
+func TestTemplateUsesConstants(t *testing.T)     // Validates constant usage
+func TestConditionBuilderIntegration(t *testing.T) // End-to-end condition testing
 ```
 
 ## Extension Points

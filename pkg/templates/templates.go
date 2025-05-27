@@ -147,7 +147,7 @@ func getNodeAppTemplate() *Template {
 		{
 			ID:   "setup-node",
 			Name: "Setup Node.js",
-			Uses: "actions/setup-node@v4",
+			Uses: GitHubActionVersions.SetupNode,
 			With: map[string]string{
 				"node-version": "{{ .Inputs.nodeVersion }}",
 				"cache":        "{{ .Inputs.packageManager }}",
@@ -209,7 +209,7 @@ func getGoServiceTemplate() *Template {
 		{
 			ID:   "setup-go",
 			Name: "Setup Go",
-			Uses: "actions/setup-go@v4",
+			Uses: GitHubActionVersions.SetupGo,
 			With: map[string]string{
 				"go-version": "{{ .Inputs.goVersion }}",
 				"cache":      "true",
@@ -266,7 +266,7 @@ func getPythonAppTemplate() *Template {
 		{
 			ID:   "setup-python",
 			Name: "Setup Python",
-			Uses: "actions/setup-python@v4",
+			Uses: GitHubActionVersions.SetupPython,
 			With: map[string]string{
 				"python-version": "{{ .Inputs.pythonVersion }}",
 				"cache":          "{{ .Inputs.packageManager }}",
@@ -381,7 +381,7 @@ func createCheckoutStep() Step {
 	return Step{
 		ID:   "checkout",
 		Name: "Checkout code",
-		Uses: "actions/checkout@v4",
+		Uses: GitHubActionVersions.Checkout,
 	}
 }
 
@@ -391,7 +391,7 @@ func createSecuritySteps() []Step {
 		{
 			ID:   "security-scan",
 			Name: "Run Trivy vulnerability scanner",
-			Uses: "aquasecurity/trivy-action@master",
+			Uses: GitHubActionVersions.TrivyAction,
 			With: map[string]string{
 				"scan-type": "fs",
 				"scan-ref":  ".",
@@ -400,16 +400,16 @@ func createSecuritySteps() []Step {
 				"severity":  "{{ .Inputs.security.trivy.severity }}",
 				"exit-code": "1",
 			},
-			If: "{{ .Inputs.security.trivy.enabled }}",
+			If: SecurityCond.TrivyScanCondition(),
 		},
 		{
 			ID:   "upload-sarif",
 			Name: "Upload Trivy scan results to GitHub Security tab",
-			Uses: "github/codeql-action/upload-sarif@v3",
+			Uses: GitHubActionVersions.CodeQLUploadSARIF,
 			With: map[string]string{
 				"sarif_file": "trivy-results.sarif",
 			},
-			If: "{{ .Inputs.security.trivy.enabled }} && always()",
+			If: SecurityCond.TrivyUploadCondition(),
 		},
 	}
 }
@@ -420,24 +420,24 @@ func createContainerSteps() []Step {
 		{
 			ID:   "setup-docker-buildx",
 			Name: "Set up Docker Buildx",
-			Uses: "docker/setup-buildx-action@v3",
-			If:   "{{ .Inputs.container.enabled }} && ({{ .Inputs.container.build.alwaysBuild }} || ({{ .Inputs.container.build.onPR }} && github.event_name == 'pull_request') || ({{ .Inputs.container.build.onProduction }} && (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || github.event_name == 'release')))",
+			Uses: GitHubActionVersions.DockerSetupBuildx,
+			If:   ContainerCond.BuildCondition(),
 		},
 		{
 			ID:   "login-registry",
 			Name: "Log in to Container Registry",
-			Uses: "docker/login-action@v3",
+			Uses: GitHubActionVersions.DockerLogin,
 			With: map[string]string{
 				"registry": "{{ .Inputs.container.registry }}",
-				"username": "GITHUB_ACTOR_PLACEHOLDER",
-				"password": "GITHUB_TOKEN_PLACEHOLDER",
+				"username": GitHubPlaceholders.ActorPlaceholder,
+				"password": GitHubPlaceholders.TokenPlaceholder,
 			},
-			If: "{{ .Inputs.container.enabled }} && {{ .Inputs.container.push.enabled }} && ({{ .Inputs.container.push.alwaysPush }} || ({{ .Inputs.container.push.onProduction }} && (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || github.event_name == 'release')))",
+			If: ContainerCond.PushCondition(),
 		},
 		{
 			ID:   "build-and-push",
 			Name: "Build and push container image",
-			Uses: "docker/build-push-action@v5",
+			Uses: GitHubActionVersions.DockerBuildPush,
 			With: map[string]string{
 				"context":    "{{ .Inputs.container.buildContext }}",
 				"file":       "{{ .Inputs.container.dockerfile }}",
@@ -447,7 +447,7 @@ func createContainerSteps() []Step {
 				"cache-from": "type=gha",
 				"cache-to":   "type=gha,mode=max",
 			},
-			If: "{{ .Inputs.container.enabled }} && ({{ .Inputs.container.build.alwaysBuild }} || ({{ .Inputs.container.build.onPR }} && github.event_name == 'pull_request') || ({{ .Inputs.container.build.onProduction }} && (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || github.event_name == 'release')))",
+			If: ContainerCond.BuildCondition(),
 		},
 	}
 }
