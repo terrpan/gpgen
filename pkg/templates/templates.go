@@ -69,7 +69,7 @@ func (tm *TemplateManager) ValidateInputs(templateName string, inputs map[string
 		}
 
 		if provided {
-			if err := validateInputValue(inputName, value, inputDef); err != nil {
+			if err := tm.ValidateInputValue(inputName, value, inputDef); err != nil {
 				return err
 			}
 		}
@@ -78,24 +78,24 @@ func (tm *TemplateManager) ValidateInputs(templateName string, inputs map[string
 	return nil
 }
 
-func validateInputValue(name string, value interface{}, def Input) error {
+func (tm *TemplateManager) ValidateInputValue(name string, value interface{}, def Input) error {
 	switch def.Type {
-	case "string":
+	case models.InputTypeString:
 		if _, ok := value.(string); !ok {
 			return fmt.Errorf("input '%s' must be a string", name)
 		}
-	case "number":
+	case models.InputTypeNumber:
 		switch value.(type) {
 		case int, float64:
 			// OK
 		default:
 			return fmt.Errorf("input '%s' must be a number", name)
 		}
-	case "boolean":
+	case models.InputTypeBoolean:
 		if _, ok := value.(bool); !ok {
 			return fmt.Errorf("input '%s' must be a boolean", name)
 		}
-	case "array":
+	case models.InputTypeArray:
 		if _, ok := value.([]interface{}); !ok {
 			return fmt.Errorf("input '%s' must be an array", name)
 		}
@@ -193,7 +193,7 @@ func getGoServiceTemplate() *Template {
 		"testCommand":  createCommandInput("Command to run tests", "go test ./...", true),
 		"buildCommand": createCommandInput("Command to build the service", "go build -o bin/service ./cmd/service", true),
 		"platforms": {
-			Type:        "string",
+			Type:        models.InputTypeString,
 			Description: "Target platforms for cross-compilation",
 			Default:     "linux/amd64,darwin/amd64",
 			Required:    false,
@@ -250,7 +250,7 @@ func getPythonAppTemplate() *Template {
 		"testCommand":    createCommandInput("Command to run tests", config.DefaultValues["testCommand"].(map[string]string)["python"], true),
 		"lintCommand":    createCommandInput("Command to run linting", config.DefaultValues["lintCommand"].(map[string]string)["python"], false),
 		"requirements": {
-			Type:        "string",
+			Type:        models.InputTypeString,
 			Description: "Requirements file path",
 			Default:     config.DefaultValues["requirements"].(map[string]string)["python"],
 			Required:    true,
@@ -310,7 +310,7 @@ func getPythonAppTemplate() *Template {
 // createLanguageVersionInput creates a version input for a programming language
 func createLanguageVersionInput(language string, defaultVersion string, versions []string) Input {
 	return Input{
-		Type:        "string",
+		Type:        models.InputTypeString,
 		Description: fmt.Sprintf("%s version to use", language),
 		Default:     defaultVersion,
 		Required:    true,
@@ -321,7 +321,7 @@ func createLanguageVersionInput(language string, defaultVersion string, versions
 // createPackageManagerInput creates a package manager input
 func createPackageManagerInput(defaultManager string, options []string) Input {
 	return Input{
-		Type:        "string",
+		Type:        models.InputTypeString,
 		Description: "Package manager to use",
 		Default:     defaultManager,
 		Required:    true,
@@ -332,7 +332,7 @@ func createPackageManagerInput(defaultManager string, options []string) Input {
 // createCommandInput creates a command input
 func createCommandInput(description string, defaultCmd string, required bool) Input {
 	return Input{
-		Type:        "string",
+		Type:        models.InputTypeString,
 		Description: description,
 		Default:     defaultCmd,
 		Required:    required,
@@ -343,16 +343,10 @@ func createCommandInput(description string, defaultCmd string, required bool) In
 func createSecurityInputs() map[string]Input {
 	return map[string]Input{
 		"security": {
-			Type:        "object",
+			Type:        models.InputTypeObject,
 			Description: "Security scanning configuration",
-			Default: map[string]interface{}{ // default security settings
-				"trivy": map[string]interface{}{ // trivy object
-					"enabled":  true,
-					"severity": "CRITICAL,HIGH",
-					"exitCode": "1",
-				},
-			},
-			Required: false,
+			Default:     models.DefaultSecurityConfig(),
+			Required:    false,
 		},
 	}
 }
@@ -361,28 +355,10 @@ func createSecurityInputs() map[string]Input {
 func createContainerInputs() map[string]Input {
 	return map[string]Input{
 		"container": {
-			Type:        "object",
+			Type:        models.InputTypeObject,
 			Description: "Container building and registry configuration",
-			Default: map[string]interface{}{ // default container settings
-				"enabled":      false,
-				"registry":     "ghcr.io",
-				"imageName":    "${{ github.repository }}",
-				"imageTag":     "${{ github.sha }}",
-				"dockerfile":   "Dockerfile",
-				"buildContext": ".",
-				"buildArgs":    "{}",
-				"push": map[string]interface{}{ // push settings
-					"enabled":      true,
-					"onProduction": true,
-				},
-				"build": map[string]interface{}{ // build settings
-					"alwaysBuild":  false,
-					"alwaysPush":   false,
-					"onPR":         true,
-					"onProduction": true,
-				},
-			},
-			Required: false,
+			Default:     models.DefaultContainerConfig(),
+			Required:    false,
 		},
 	}
 }
