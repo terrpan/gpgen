@@ -689,6 +689,38 @@ func TestWorkflowGenerator_InputProcessing(t *testing.T) {
 		assert.Equal(t, "ghcr.io", processedInputs.Container.Registry)
 		assert.Equal(t, "${{ github.repository }}", processedInputs.Container.ImageName)
 	})
+
+	t.Run("defaults push onProduction when only enabled provided", func(t *testing.T) {
+		rawInputs := map[string]interface{}{
+			"container": map[string]interface{}{
+				"push": map[string]interface{}{
+					"enabled": true,
+				},
+			},
+		}
+
+		processedInputs, err := generator.inputProcessor.ProcessInputs(rawInputs)
+		require.NoError(t, err)
+
+		assert.True(t, processedInputs.Container.Push.Enabled)
+		assert.True(t, processedInputs.Container.Push.OnProduction, "OnProduction should default to true when not specified")
+	})
+
+	t.Run("defaults build onProduction when only onPR provided", func(t *testing.T) {
+		rawInputs := map[string]interface{}{
+			"container": map[string]interface{}{
+				"build": map[string]interface{}{
+					"onPR": false,
+				},
+			},
+		}
+
+		processedInputs, err := generator.inputProcessor.ProcessInputs(rawInputs)
+		require.NoError(t, err)
+
+		assert.False(t, processedInputs.Container.Build.OnPR)
+		assert.True(t, processedInputs.Container.Build.OnProduction, "OnProduction should default to true when not specified")
+	})
 }
 
 func TestWorkflowGenerator_GetEffectiveInputsWithTemplateDefaults(t *testing.T) {
