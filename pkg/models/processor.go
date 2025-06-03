@@ -131,15 +131,31 @@ func (p *InputProcessor) applyDefaults(inputs *WorkflowInputs) {
 		inputs.Container = DefaultContainerConfig()
 	}
 
-	// Ensure push and build configs have defaults
-	if !inputs.Container.Push.Enabled && !inputs.Container.Push.OnProduction {
+	// Determine if push/build configs were explicitly provided in inputs
+	var (
+		pushProvided  bool
+		buildProvided bool
+	)
+	if rawContainer, ok := p.originalInputs["container"].(map[string]interface{}); ok {
+		if _, ok := rawContainer["push"]; ok {
+			pushProvided = true
+		}
+		if _, ok := rawContainer["build"]; ok {
+			buildProvided = true
+		}
+	}
+
+	// Ensure push config has sensible defaults only when not provided
+	if !pushProvided && !inputs.Container.Push.Enabled && !inputs.Container.Push.OnProduction {
 		inputs.Container.Push = PushConfig{
 			Enabled:      true,
 			OnProduction: true,
 		}
 	}
 
-	if !inputs.Container.Build.OnPR && !inputs.Container.Build.OnProduction {
+	// Ensure build config has sensible defaults only when not provided
+	if !buildProvided && !inputs.Container.Build.OnPR && !inputs.Container.Build.OnProduction &&
+		!inputs.Container.Build.AlwaysBuild && !inputs.Container.Build.AlwaysPush {
 		inputs.Container.Build = BuildConfig{
 			AlwaysBuild:  false,
 			AlwaysPush:   false,
