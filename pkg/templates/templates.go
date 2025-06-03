@@ -17,6 +17,9 @@ type Template = models.Template
 type Input = models.Input
 type Step = models.Step
 
+// TemplateAuthor represents the common author for built-in templates
+const TemplateAuthor = "GPGen Team"
+
 // TemplateManager handles template loading and management
 type TemplateManager struct {
 	templatesDir string
@@ -181,7 +184,7 @@ func getNodeAppTemplate() *Template {
 		Name:        "node-app",
 		Description: "Node.js application with testing, building, and deployment",
 		Version:     "1.0.0",
-		Author:      "GPGen Team",
+               Author:      TemplateAuthor,
 		Tags:        []string{"nodejs", "javascript", "web"},
 		Inputs:      allInputs,
 		Steps:       steps,
@@ -239,7 +242,7 @@ func getGoServiceTemplate() *Template {
 		Name:        "go-service",
 		Description: "Go service with testing, building, and cross-compilation",
 		Version:     "1.0.0",
-		Author:      "GPGen Team",
+               Author:      TemplateAuthor,
 		Tags:        []string{"go", "golang", "service", "api"},
 		Inputs:      allInputs,
 		Steps:       steps,
@@ -304,7 +307,7 @@ func getPythonAppTemplate() *Template {
 		Name:        "python-app",
 		Description: "Python application with testing, linting, and packaging",
 		Version:     "1.0.0",
-		Author:      "GPGen Team",
+               Author:      TemplateAuthor,
 		Tags:        []string{"python", "web", "application"},
 		Inputs:      allInputs,
 		Steps:       steps,
