@@ -74,7 +74,7 @@ type EnvironmentConfig struct {
 var (
 	validAPIVersions = []string{"gpgen.dev/v1"}
 	validKinds       = []string{"Pipeline"}
-	validTemplates   = []string{"node-app", "go-service"}
+	validTemplates   = []string{"node-app", "go-service", "python-app"}
 	positionRegex    = regexp.MustCompile(`^(before|after|replace):[a-z0-9-]+$`)
 )
 
