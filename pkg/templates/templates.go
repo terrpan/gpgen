@@ -130,12 +130,14 @@ func getBuiltinTemplate(name string) (*Template, error) {
 }
 
 func getNodeAppTemplate() *Template {
-	// Create base inputs for Node.js language
+	// Create base inputs for Node.js language using type-safe config
+	nodeConfig := config.Config.Languages[config.LanguageNode]
+
 	baseInputs := map[string]Input{
-		"nodeVersion":    createLanguageVersionInput("Node.js", config.DefaultValues["nodeVersion"].(string), config.LanguageVersions["node"]),
-		"packageManager": createPackageManagerInput(config.DefaultValues["packageManager"].(map[string]string)["node"], config.PackageManagers["node"]),
-		"testCommand":    createCommandInput("Command to run tests", config.DefaultValues["testCommand"].(map[string]string)["node"], true),
-		"buildCommand":   createCommandInput("Command to build the application", config.DefaultValues["buildCommand"].(map[string]string)["node"], false),
+		"nodeVersion":    createLanguageVersionInput("Node.js", nodeConfig.DefaultVersion, nodeConfig.Versions),
+		"packageManager": createPackageManagerInput(string(nodeConfig.DefaultManager), config.Config.GetPackageManagerOptions(config.LanguageNode)),
+		"testCommand":    createCommandInput("Command to run tests", nodeConfig.DefaultTestCmd, true),
+		"buildCommand":   createCommandInput("Command to build the application", nodeConfig.DefaultBuildCmd, false),
 	}
 
 	// Merge with security and container inputs
@@ -187,11 +189,13 @@ func getNodeAppTemplate() *Template {
 }
 
 func getGoServiceTemplate() *Template {
-	// Create base inputs for Go language
+	// Create base inputs for Go language using type-safe config
+	goConfig := config.Config.Languages[config.LanguageGo]
+
 	baseInputs := map[string]Input{
-		"goVersion":    createLanguageVersionInput("Go", "1.21", []string{"1.21", "1.22", "1.23", "1.24"}),
-		"testCommand":  createCommandInput("Command to run tests", "go test ./...", true),
-		"buildCommand": createCommandInput("Command to build the service", "go build -o bin/service ./cmd/service", true),
+		"goVersion":    createLanguageVersionInput("Go", goConfig.DefaultVersion, goConfig.Versions),
+		"testCommand":  createCommandInput("Command to run tests", goConfig.DefaultTestCmd, true),
+		"buildCommand": createCommandInput("Command to build the service", goConfig.DefaultBuildCmd, true),
 		"platforms": {
 			Type:        models.InputTypeString,
 			Description: "Target platforms for cross-compilation",
@@ -243,16 +247,18 @@ func getGoServiceTemplate() *Template {
 }
 
 func getPythonAppTemplate() *Template {
-	// Create base inputs for Python language
+	// Create base inputs for Python language using type-safe config
+	pythonConfig := config.Config.Languages[config.LanguagePython]
+
 	baseInputs := map[string]Input{
-		"pythonVersion":  createLanguageVersionInput("Python", config.DefaultValues["pythonVersion"].(string), config.LanguageVersions["python"]),
-		"packageManager": createPackageManagerInput(config.DefaultValues["packageManager"].(map[string]string)["python"], config.PackageManagers["python"]),
-		"testCommand":    createCommandInput("Command to run tests", config.DefaultValues["testCommand"].(map[string]string)["python"], true),
-		"lintCommand":    createCommandInput("Command to run linting", config.DefaultValues["lintCommand"].(map[string]string)["python"], false),
+		"pythonVersion":  createLanguageVersionInput("Python", pythonConfig.DefaultVersion, pythonConfig.Versions),
+		"packageManager": createPackageManagerInput(string(pythonConfig.DefaultManager), config.Config.GetPackageManagerOptions(config.LanguagePython)),
+		"testCommand":    createCommandInput("Command to run tests", pythonConfig.DefaultTestCmd, true),
+		"lintCommand":    createCommandInput("Command to run linting", pythonConfig.DefaultLintCmd, false),
 		"requirements": {
 			Type:        models.InputTypeString,
 			Description: "Requirements file path",
-			Default:     config.DefaultValues["requirements"].(map[string]string)["python"],
+			Default:     pythonConfig.DefaultReqFile,
 			Required:    true,
 		},
 	}
