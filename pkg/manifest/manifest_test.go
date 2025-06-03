@@ -28,6 +28,25 @@ spec:
 	assert.Equal(t, "1.24", manifest.Spec.Inputs["goVersion"])
 }
 
+func TestParseManifest_PythonTemplate(t *testing.T) {
+	yamlContent := `
+apiVersion: gpgen.dev/v1
+kind: Pipeline
+spec:
+  template: "python-app"
+  inputs:
+    pythonVersion: "3.12"
+`
+
+	manifest, err := ParseManifest([]byte(yamlContent))
+	require.NoError(t, err)
+
+	assert.Equal(t, "gpgen.dev/v1", manifest.APIVersion)
+	assert.Equal(t, "Pipeline", manifest.Kind)
+	assert.Equal(t, "python-app", manifest.Spec.Template)
+	assert.Equal(t, "3.12", manifest.Spec.Inputs["pythonVersion"])
+}
+
 func TestParseManifest_ValidComplexManifest(t *testing.T) {
 	yamlContent := `
 apiVersion: gpgen.dev/v1
@@ -192,6 +211,17 @@ func TestValidateManifest_ValidManifests(t *testing.T) {
 							Run:      "echo hello",
 						},
 					},
+				},
+			},
+		},
+		{
+			name: "python template",
+			manifest: &Manifest{
+				APIVersion: "gpgen.dev/v1",
+				Kind:       "Pipeline",
+				Spec: ManifestSpec{
+					Template: "python-app",
+					Inputs:   map[string]interface{}{"pythonVersion": "3.12"},
 				},
 			},
 		},
