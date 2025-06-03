@@ -103,8 +103,8 @@ type Manifest struct {
 type ManifestSpec struct {
     Template     string                            `yaml:"template"`
     Inputs       map[string]interface{}           `yaml:"inputs,omitempty"`
-    Steps        []CustomStep                     `yaml:"steps,omitempty"`
-    Environments map[string]EnvironmentOverride   `yaml:"environments,omitempty"`
+    CustomSteps  []CustomStep                     `yaml:"customSteps,omitempty"`
+    Environments map[string]EnvironmentConfig     `yaml:"environments,omitempty"`
 }
 ```
 
