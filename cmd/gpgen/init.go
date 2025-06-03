@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -82,115 +83,122 @@ func generateManifestTemplate(template, name string) (string, error) {
 	}
 }
 
+// generateManifest creates a manifest using common metadata and environment sections.
+// description provides the metadata description annotation.
+// baseInputs contains the default input values for the template. The map values
+// should include any required quoting.
+// envInputs provides environment specific input values keyed by environment name
+// (e.g. "staging" or "production").
+func generateManifest(name, tmplName, description string, baseInputs map[string]string, envInputs map[string]map[string]string) string {
+	var b strings.Builder
+
+	b.WriteString("apiVersion: gpgen.dev/v1\n")
+	b.WriteString("kind: Pipeline\n")
+	b.WriteString("metadata:\n")
+	b.WriteString(fmt.Sprintf("  name: %s\n", name))
+	b.WriteString("  annotations:\n")
+	b.WriteString("    gpgen.dev/validation-mode: relaxed\n")
+	b.WriteString(fmt.Sprintf("    gpgen.dev/description: \"%s\"\n", description))
+	b.WriteString("spec:\n")
+	b.WriteString(fmt.Sprintf("  template: %s\n", tmplName))
+	b.WriteString("  inputs:\n")
+
+	// Render inputs in sorted order for deterministic output
+	keys := make([]string, 0, len(baseInputs))
+	for k := range baseInputs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		b.WriteString(fmt.Sprintf("    %s: %s\n", k, baseInputs[k]))
+	}
+
+	b.WriteString("\n  # Add custom steps here\n  customSteps: []\n\n")
+
+	b.WriteString("  # Environment-specific configurations\n  environments:\n")
+	envOrder := []string{"staging", "production"}
+	for _, env := range envOrder {
+		b.WriteString(fmt.Sprintf("    %s:\n", env))
+		b.WriteString("      annotations:\n")
+		b.WriteString("        gpgen.dev/validation-mode: strict\n")
+		inputs := envInputs[env]
+		if len(inputs) == 0 {
+			b.WriteString("      inputs: {}\n\n")
+			continue
+		}
+		b.WriteString("      inputs:\n")
+		keys := make([]string, 0, len(inputs))
+		for k := range inputs {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			b.WriteString(fmt.Sprintf("        %s: %s\n", k, inputs[k]))
+		}
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
 func generateNodeAppManifest(name string) string {
-	return fmt.Sprintf(`apiVersion: gpgen.dev/v1
-kind: Pipeline
-metadata:
-  name: %s
-  annotations:
-    gpgen.dev/validation-mode: relaxed
-    gpgen.dev/description: "Node.js application pipeline"
-spec:
-  template: node-app
-  inputs:
-    nodeVersion: "18"
-    packageManager: npm
-    testCommand: "npm test"
-    buildCommand: "npm run build"
-
-  # Add custom steps here
-  customSteps: []
-
-  # Environment-specific configurations
-  environments:
-    staging:
-      annotations:
-        gpgen.dev/validation-mode: strict
-      inputs:
-        testCommand: "npm run test:ci"
-
-    production:
-      annotations:
-        gpgen.dev/validation-mode: strict
-      inputs:
-        nodeVersion: "20"
-        testCommand: "npm run test:all"
-`, name)
+	baseInputs := map[string]string{
+		"buildCommand":   "\"npm run build\"",
+		"nodeVersion":    "\"18\"",
+		"packageManager": "npm",
+		"testCommand":    "\"npm test\"",
+	}
+	envInputs := map[string]map[string]string{
+		"staging": {
+			"testCommand": "\"npm run test:ci\"",
+		},
+		"production": {
+			"nodeVersion": "\"20\"",
+			"testCommand": "\"npm run test:all\"",
+		},
+	}
+	return generateManifest(name, "node-app", "Node.js application pipeline", baseInputs, envInputs)
 }
 
 func generateGoServiceManifest(name string) string {
-	return fmt.Sprintf(`apiVersion: gpgen.dev/v1
-kind: Pipeline
-metadata:
-  name: %s
-  annotations:
-    gpgen.dev/validation-mode: relaxed
-    gpgen.dev/description: "Go service pipeline with security scanning"
-spec:
-  template: go-service
-  inputs:
-    goVersion: "1.21"
-    testCommand: "go test ./..."
-    buildCommand: "go build -o bin/%s ./cmd/%s"
-    platforms: "linux/amd64,darwin/amd64"
-    trivyScanEnabled: true
-    trivySeverity: "CRITICAL,HIGH"
-
-  # Add custom steps here
-  customSteps: []
-
-  # Environment-specific configurations
-  environments:
-    staging:
-      annotations:
-        gpgen.dev/validation-mode: strict
-      inputs:
-        testCommand: "go test -race ./..."
-        trivySeverity: "CRITICAL,HIGH,MEDIUM"
-
-    production:
-      annotations:
-        gpgen.dev/validation-mode: strict
-      inputs:
-        goVersion: "1.22"
-        testCommand: "go test -race -cover ./..."
-        trivySeverity: "CRITICAL"
-`, name, name, name)
+	baseInputs := map[string]string{
+		"buildCommand":     fmt.Sprintf("\"go build -o bin/%s ./cmd/%s\"", name, name),
+		"goVersion":        "\"1.21\"",
+		"platforms":        "\"linux/amd64,darwin/amd64\"",
+		"testCommand":      "\"go test ./...\"",
+		"trivyScanEnabled": "true",
+		"trivySeverity":    "\"CRITICAL,HIGH\"",
+	}
+	envInputs := map[string]map[string]string{
+		"staging": {
+			"testCommand":   "\"go test -race ./...\"",
+			"trivySeverity": "\"CRITICAL,HIGH,MEDIUM\"",
+		},
+		"production": {
+			"goVersion":     "\"1.22\"",
+			"testCommand":   "\"go test -race -cover ./...\"",
+			"trivySeverity": "\"CRITICAL\"",
+		},
+	}
+	return generateManifest(name, "go-service", "Go service pipeline with security scanning", baseInputs, envInputs)
 }
 
 func generatePythonAppManifest(name string) string {
-	return fmt.Sprintf(`apiVersion: gpgen.dev/v1
-kind: Pipeline
-metadata:
-  name: %s
-  annotations:
-    gpgen.dev/validation-mode: relaxed
-    gpgen.dev/description: "Python application pipeline"
-spec:
-  template: python-app
-  inputs:
-    pythonVersion: "3.11"
-    packageManager: pip
-    testCommand: "pytest"
-    lintCommand: "flake8"
-    requirements: "requirements.txt"
-
-  # Add custom steps here
-  customSteps: []
-
-  # Environment-specific configurations
-  environments:
-    staging:
-      annotations:
-        gpgen.dev/validation-mode: strict
-      inputs:
-        testCommand: "pytest --cov=. --cov-report=xml"
-
-    production:
-      annotations:
-        gpgen.dev/validation-mode: strict
-      inputs:
-        pythonVersion: "3.12"
-        testCommand: "pytest --cov=. --cov-report=xml --cov-fail-under=80"
-`, name)
+	baseInputs := map[string]string{
+		"lintCommand":    "\"flake8\"",
+		"packageManager": "pip",
+		"pythonVersion":  "\"3.11\"",
+		"requirements":   "\"requirements.txt\"",
+		"testCommand":    "\"pytest\"",
+	}
+	envInputs := map[string]map[string]string{
+		"staging": {
+			"testCommand": "\"pytest --cov=. --cov-report=xml\"",
+		},
+		"production": {
+			"pythonVersion": "\"3.12\"",
+			"testCommand":   "\"pytest --cov=. --cov-report=xml --cov-fail-under=80\"",
+		},
+	}
+	return generateManifest(name, "python-app", "Python application pipeline", baseInputs, envInputs)
 }
