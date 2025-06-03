@@ -10,6 +10,30 @@ type InputProcessor struct {
 	originalInputs map[string]interface{}
 }
 
+// hasInput checks if a nested input field was present in the original inputs
+func (p *InputProcessor) hasInput(keys ...string) bool {
+	if p.originalInputs == nil {
+		return false
+	}
+
+	var current interface{} = p.originalInputs
+	for _, k := range keys {
+		m, ok := current.(map[string]interface{})
+		if !ok {
+			return false
+		}
+
+		v, ok := m[k]
+		if !ok {
+			return false
+		}
+
+		current = v
+	}
+
+	return true
+}
+
 // NewInputProcessor creates a new input processor
 func NewInputProcessor() *InputProcessor {
 	return &InputProcessor{}
@@ -131,21 +155,27 @@ func (p *InputProcessor) applyDefaults(inputs *WorkflowInputs) {
 		inputs.Container = DefaultContainerConfig()
 	}
 
-	// Ensure push and build configs have defaults
-	if !inputs.Container.Push.Enabled && !inputs.Container.Push.OnProduction {
-		inputs.Container.Push = PushConfig{
-			Enabled:      true,
-			OnProduction: true,
-		}
+	// Ensure push and build configs have defaults applied per field
+	def := DefaultContainerConfig()
+
+	if !inputs.Container.Push.Enabled && !p.hasInput("container", "push", "enabled") {
+		inputs.Container.Push.Enabled = def.Push.Enabled
+	}
+	if !inputs.Container.Push.OnProduction && !p.hasInput("container", "push", "onProduction") {
+		inputs.Container.Push.OnProduction = def.Push.OnProduction
 	}
 
-	if !inputs.Container.Build.OnPR && !inputs.Container.Build.OnProduction {
-		inputs.Container.Build = BuildConfig{
-			AlwaysBuild:  false,
-			AlwaysPush:   false,
-			OnPR:         true,
-			OnProduction: true,
-		}
+	if !inputs.Container.Build.AlwaysBuild && !p.hasInput("container", "build", "alwaysBuild") {
+		inputs.Container.Build.AlwaysBuild = def.Build.AlwaysBuild
+	}
+	if !inputs.Container.Build.AlwaysPush && !p.hasInput("container", "build", "alwaysPush") {
+		inputs.Container.Build.AlwaysPush = def.Build.AlwaysPush
+	}
+	if !inputs.Container.Build.OnPR && !p.hasInput("container", "build", "onPR") {
+		inputs.Container.Build.OnPR = def.Build.OnPR
+	}
+	if !inputs.Container.Build.OnProduction && !p.hasInput("container", "build", "onProduction") {
+		inputs.Container.Build.OnProduction = def.Build.OnProduction
 	}
 }
 
